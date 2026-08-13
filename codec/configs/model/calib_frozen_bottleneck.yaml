@@ -1,0 +1,61 @@
+# CALIBRATION ARM -- not an idea, a deliberate downgrade.
+#
+# Identical to model/baseline_image_base.yaml except that the bottleneck projection is random and
+# frozen (see ../../../src/kmira/codec/variants/frozen_bottleneck.py). This reproduces the "random
+# frozen projection" row of mira's paper Table 4, which scores 1.4 dB PSNR below the learned
+# convolution (28.3 vs 29.7) at full scale.
+#
+# Run it against baseline_image_base to find out whether our scaled-down benchmark can resolve a
+# bottleneck-sized effect at all. If it can, the benchmark is trustworthy for a real bottleneck
+# idea; if the gap disappears into the run-to-run noise, it is blind and needs more training, a
+# bigger decoder, or both.
+
+loss:
+  _target_: mira.codec.CodecLoss
+  _convert_: all
+
+  weights:
+    _target_: mira.codec.CodecLossWeights
+    loss_mae: 1.0
+    loss_lpips_perceptual: 1.0
+    lpips_perceptual_frame_frac: 1.0
+    loss_dino_latent_consistency: 1.0
+    dino_latent_consistency_frame_frac: 1.0
+    compile_dino: ${run.compile}
+    auto_weight: true
+
+architecture:
+  _target_: kmira.codec.variants.frozen_bottleneck.VideoCodecFrozenBottleneck
+  _convert_: all
+
+  config:
+    _target_: mira.codec.VideoCodecConfig
+    encoder:
+      latent_dim: 32
+      rae_model: dinov3_vitl16
+      aggregation_layers: [11, 13, 15, 17, 19, 21, 23]
+      bottleneck:
+        stride: 2
+        temporal_stride: 1
+        noise_tau: 0.0
+      compile_dino: ${run.compile}
+      video:
+        height: 288
+        width: 512
+        channels: 3
+        timesteps: 1
+        fps: 20
+
+    decoder:
+      latent_dim: ${..encoder.latent_dim}
+      activation_checkpointing: true
+      bottleneck:
+        stride: ${...encoder.bottleneck.stride}
+      vit_width: 768
+      vit_depth: 12
+      vit_num_heads: 12
+      mlp_dim_multiplier: 4
+      qk_norm: layernorm
+      patch_size: 16
+      patch_size_t: 1
+      video: ${..encoder.video}

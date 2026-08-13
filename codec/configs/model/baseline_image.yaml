@@ -1,0 +1,58 @@
+# Same architecture as ../baseline.yaml (mira's stock codec, image-only), duplicated here so it can
+# be selected as a Hydra "model" group member when invoking mira's own scripts/train_codec.py via
+# `--config-dir=<kmira>/configs model=baseline_image` (mira's train_codec.yaml composes `model:
+# raev2_codec_tdown` from configs/model/, so ours must live under the same group name/shape to be
+# swapped in). Keep in sync with ../baseline.yaml if either changes.
+#
+# activation_checkpointing is on (unlike baseline.yaml) to keep memory down during training on a
+# single consumer GPU; it only affects training-time memory/speed, not the architecture itself.
+
+loss:
+  _target_: mira.codec.CodecLoss
+  _convert_: all
+
+  weights:
+    _target_: mira.codec.CodecLossWeights
+    loss_mae: 1.0
+    loss_lpips_perceptual: 1.0
+    lpips_perceptual_frame_frac: 1.0
+    loss_dino_latent_consistency: 1.0
+    dino_latent_consistency_frame_frac: 1.0
+    compile_dino: ${run.compile}
+    auto_weight: true
+
+architecture:
+  _target_: mira.codec.VideoCodec
+  _convert_: all
+
+  config:
+    _target_: mira.codec.VideoCodecConfig
+    encoder:
+      latent_dim: 32
+      rae_model: dinov3_vitl16
+      aggregation_layers: [11, 13, 15, 17, 19, 21, 23]
+      bottleneck:
+        stride: 2
+        temporal_stride: 1
+        noise_tau: 0.0
+      compile_dino: ${run.compile}
+      video:
+        height: 288
+        width: 512
+        channels: 3
+        timesteps: 1
+        fps: 20
+
+    decoder:
+      latent_dim: ${..encoder.latent_dim}
+      activation_checkpointing: true
+      bottleneck:
+        stride: ${...encoder.bottleneck.stride}
+      vit_width: 1152
+      vit_depth: 28
+      vit_num_heads: 16
+      mlp_dim_multiplier: 4
+      qk_norm: layernorm
+      patch_size: 16
+      patch_size_t: 1
+      video: ${..encoder.video}

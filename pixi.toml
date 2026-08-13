@@ -1,0 +1,32 @@
+# Standalone environment for kmira, mirroring mira's own pixi setup so the two stay
+# ABI/version-compatible (same torch/torchcodec/FFmpeg pins). mira is installed editable from
+# ../mira, so mira's source is never modified — it stays the ground-truth baseline.
+#
+#   pixi run setup      # one-time: install kmira + mira[train,eval] into the env (GPU/CUDA torch)
+#   pixi run setup-cpu  # same, but CPU-only torch
+#   pixi run test       # pytest
+#   pixi run verify     # format + lint + typecheck + test
+
+[workspace]
+authors = ["katta"]
+name = "kmira"
+version = "0.0.1"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[activation.env]
+LD_LIBRARY_PATH = "$PIXI_PROJECT_ROOT/.pixi/envs/default/lib:$LD_LIBRARY_PATH"
+
+[dependencies]
+python = "3.12.*"
+ffmpeg = ">=7,<8"
+uv = "*"
+
+[tasks]
+setup = "uv pip install --python $CONDA_PREFIX/bin/python --torch-backend cu128 -e '.[eval,dev]' -e '../mira[viz,notebook,hf,train,dev]' 'torch==2.8.*' && uv pip install --python $CONDA_PREFIX/bin/python --no-deps torchcodec==0.7.0 --index-url https://download.pytorch.org/whl/cpu"
+setup-cpu = "uv pip install --python $CONDA_PREFIX/bin/python --torch-backend cpu -e '.[eval,dev]' -e '../mira[decode,viz,notebook,hf,train,dev]' 'torch==2.8.*' torchcodec==0.7.0"
+test = "pytest -q"
+format = "ruff format src tests"
+lint = "ruff check src tests"
+typecheck = "pyright src tests"
+verify = { depends-on = ["format", "lint", "typecheck", "test"] }

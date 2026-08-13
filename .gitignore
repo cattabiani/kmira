@@ -1,0 +1,12 @@
+.pixi/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+checkpoints/
+data/
+*.pth
+*.ckpt
+wandb/
+.env
+outputs/

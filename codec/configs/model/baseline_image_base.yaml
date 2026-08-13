@@ -1,0 +1,64 @@
+# mira's stock codec, image-only, with the **Base** decoder (12 layers x 768 wide, ~85M decoder
+# params) instead of the stock XL (28 x 1152). Base is one of the three sizes mira themselves
+# ablate in paper Table 7, so it is a published operating point rather than an arbitrary shrink.
+#
+# Why Base is the benchmark scale (see ../../README.md step 10): on a single 12GB GPU it runs at
+# 8.4 frames/s versus XL's 3.3, and 5.2x fewer trainable parameters means it can approach its own
+# ceiling within a few hours. That matters more than absolute quality here, because an undertrained
+# model measures which variant converges fastest rather than which one is actually better.
+#
+# No bfloat16 cast is needed at this size: fp32 weights + bf16 autocast (mira's own strategy) peaks
+# at 7.2GB at batch 4. Keep batch <= 4; batch 8 OOMs in fp32 and buys no throughput anyway, since
+# the GPU is already saturated by a single frame.
+
+loss:
+  _target_: mira.codec.CodecLoss
+  _convert_: all
+
+  weights:
+    _target_: mira.codec.CodecLossWeights
+    loss_mae: 1.0
+    loss_lpips_perceptual: 1.0
+    # mira uses 0.25 for both fracs, applying the perceptual losses to a quarter of a 40-frame clip.
+    # With a single frame per sample, anything below 1.0 would drop the frame entirely.
+    lpips_perceptual_frame_frac: 1.0
+    loss_dino_latent_consistency: 1.0
+    dino_latent_consistency_frame_frac: 1.0
+    compile_dino: ${run.compile}
+    auto_weight: true
+
+architecture:
+  _target_: mira.codec.VideoCodec
+  _convert_: all
+
+  config:
+    _target_: mira.codec.VideoCodecConfig
+    encoder:
+      latent_dim: 32
+      rae_model: dinov3_vitl16
+      aggregation_layers: [11, 13, 15, 17, 19, 21, 23]
+      bottleneck:
+        stride: 2
+        temporal_stride: 1
+        noise_tau: 0.0
+      compile_dino: ${run.compile}
+      video:
+        height: 288
+        width: 512
+        channels: 3
+        timesteps: 1
+        fps: 20
+
+    decoder:
+      latent_dim: ${..encoder.latent_dim}
+      activation_checkpointing: true
+      bottleneck:
+        stride: ${...encoder.bottleneck.stride}
+      vit_width: 768
+      vit_depth: 12
+      vit_num_heads: 12
+      mlp_dim_multiplier: 4
+      qk_norm: layernorm
+      patch_size: 16
+      patch_size_t: 1
+      video: ${..encoder.video}

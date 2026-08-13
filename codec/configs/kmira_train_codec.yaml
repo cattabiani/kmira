@@ -1,0 +1,76 @@
+# Top-level training config for kmira, consumed by mira's OWN scripts/train_codec.py (unmodified):
+#
+#   pixi run python ../mira/scripts/train_codec.py \
+#       --config-dir=codec/configs --config-name=kmira_train_codec model=baseline_image_base ...
+#
+# Deliberately NOT named train_codec.yaml: mira's config of that name would sit on the same Hydra
+# search path and the shadowing would be ambiguous. Hence --config-name.
+#
+# `dataset`/`actions` are inlined here rather than composed from mira's configs/dataset/
+# rocket_league.yaml, to avoid cross-repo searchpath setup for a handful of stable fields; the
+# Rocket League action vocabulary doesn't change.
+#
+# Every field mira's trainer reads must exist here, since this replaces its own top-level config.
+defaults:
+  - _self_
+  - model: baseline_image_base
+
+actions:
+  target_fps: 20
+  valid_keys: [W, A, S, D, Q, E, Space, LShiftKey, LControlKey]
+
+wandb:
+  entity: null
+  project: kmira-codec
+  name: codec
+  group: null
+  mode: disabled  # "online"/"offline" to turn on W&B logging
+  remove_old_runs: false  # read by mira's _init_wandb; keep false when mode=disabled
+
+run:
+  seed: 28
+  steps: 15300  # ~2h at the measured 0.47 s/step (batch 4); overridden by the launch scripts
+  batch_size: 4  # 4 fits fp32 in ~9.6GB with EMA; 8 OOMs and buys no throughput anyway
+  checkpoint_every: "10%"  # bounds a crash to ~12 min of lost work on a 2h run. Each save is a
+  # ~4.4GB write, so 10 saves per arm is ~132GB across three arms -- under 0.2% of a consumer SSD's
+  # rated endurance, which is a fair price for not losing an unattended overnight run. Disk *usage*
+  # stays at one checkpoint (~4.4GB) regardless, because checkpoint_keep_recent=1 deletes the
+  # previous one. (100% would mean the only checkpoint is the final one: no crash recovery at all.)
+  checkpoint_keep_recent: 1
+  checkpoint_keep_permanent_every: -1
+  log_every: "1%"
+  output_dir: "checkpoints/baseline_image_base"
+  compile: false
+  continue_from: null
+  finetune_from: null
+  latents_ema_decay: 0.99
+
+dataset:
+  train_index: null
+  test_index: null
+  n_players: 1
+  target_fps: 20
+  frame_size: null
+  exclude_replays: false  # mira's trainer forces True for the validation loader regardless
+
+dataloader:
+  num_workers: 6
+  shuffle_buffer_size: 100
+
+validation:
+  batch_size: null
+  val_first: true  # a step-0 reading, so the curve starts from the untrained reference
+  val_n_samples: 512  # ~20s per validation; at val_every=5% that is ~5% overhead
+  val_every: "5%"
+
+optim:
+  optimizer:
+    lr: 1e-4
+    betas: [0.9, 0.95]
+    weight_decay: 0.1
+  scheduler:
+    warmup_steps: 1000
+    constant_steps: 0
+    decay_steps: 14300  # ~= steps - warmup_steps; the launch scripts recompute this
+    min_lr: 1e-6
+  model_ema_decay: 0.9999  # mira's default; the fp32 shadow copy fits now that the decoder is Base
