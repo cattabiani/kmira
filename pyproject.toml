@@ -30,6 +30,7 @@ packages = ["src/kmira"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
+markers = ["slow: builds a real DINOv3 backbone; minutes and gigabytes, not milliseconds"]
 
 [tool.ruff]
 line-length = 110

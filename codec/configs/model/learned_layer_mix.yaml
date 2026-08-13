@@ -1,0 +1,57 @@
+# EXPERIMENT: replace the stock hand-picked 7-layer aggregation with a learned scalar weight per
+# DINOv3 layer (24 total), initialised to reproduce the stock formula exactly. See
+# ../../../src/kmira/codec/variants/learned_layer_mix.py for the full rationale.
+#
+# Identical to model/baseline_image_base.yaml except `architecture._target_` and (irrelevantly, since
+# the variant overrides it) `aggregation_layers`, kept here only so this file documents what the
+# learned weights are initialised to reproduce.
+
+loss:
+  _target_: mira.codec.CodecLoss
+  _convert_: all
+
+  weights:
+    _target_: mira.codec.CodecLossWeights
+    loss_mae: 1.0
+    loss_lpips_perceptual: 1.0
+    lpips_perceptual_frame_frac: 1.0
+    loss_dino_latent_consistency: 1.0
+    dino_latent_consistency_frame_frac: 1.0
+    compile_dino: ${run.compile}
+    auto_weight: true
+
+architecture:
+  _target_: kmira.codec.variants.learned_layer_mix.VideoCodecLearnedLayerMix
+  _convert_: all
+
+  config:
+    _target_: mira.codec.VideoCodecConfig
+    encoder:
+      latent_dim: 32
+      rae_model: dinov3_vitl16
+      aggregation_layers: [11, 13, 15, 17, 19, 21, 23]
+      bottleneck:
+        stride: 2
+        temporal_stride: 1
+        noise_tau: 0.0
+      compile_dino: ${run.compile}
+      video:
+        height: 288
+        width: 512
+        channels: 3
+        timesteps: 1
+        fps: 20
+
+    decoder:
+      latent_dim: ${..encoder.latent_dim}
+      activation_checkpointing: true
+      bottleneck:
+        stride: ${...encoder.bottleneck.stride}
+      vit_width: 768
+      vit_depth: 12
+      vit_num_heads: 12
+      mlp_dim_multiplier: 4
+      qk_norm: layernorm
+      patch_size: 16
+      patch_size_t: 1
+      video: ${..encoder.video}

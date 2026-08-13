@@ -182,6 +182,47 @@ class ReconstructionScores:
     n_frames: int
 
 
+def load_codec_respecting_target(checkpoint_path: Path, device: str | torch.device) -> VideoCodec:
+    """Load a codec checkpoint, building the class its saved config names.
+
+    ``VideoCodec.load_from_checkpoint`` hardcodes ``VideoCodec(config, ...)`` and ignores the
+    ``_target_`` recorded in the checkpoint's ``codec_config.yaml``. For a stock checkpoint that is
+    the same thing; for one of our variants it is not. Scoring
+    :class:`~kmira.codec.variants.learned_layer_mix.VideoCodecLearnedLayerMix` through it would build
+    a *stock* encoder and then fail the strict ``load_state_dict`` on the checkpoint's extra
+    ``encoder.layer_weights`` -- i.e. an arm would train for hours and only then fail at scoring.
+
+    Instantiating the saved ``model.architecture`` node through Hydra respects ``_target_``, so each
+    checkpoint is scored with the architecture that produced it. Stock checkpoints are unaffected:
+    their ``_target_`` is ``mira.codec.VideoCodec``, exactly what the old path built.
+    """
+    from hydra.utils import instantiate
+    from omegaconf import OmegaConf
+
+    config_path = None
+    for parent in Path(checkpoint_path).parents:
+        candidate = parent / VideoCodec.CONFIG_FILENAME
+        if candidate.exists():
+            config_path = candidate
+            break
+    if config_path is None:
+        raise FileNotFoundError(
+            f"No {VideoCodec.CONFIG_FILENAME} in any parent of {checkpoint_path}; it is written "
+            f"alongside checkpoints by the trainer."
+        )
+
+    cfg = OmegaConf.load(config_path)
+    # require_dino_weights=False: the frozen backbone's weights are in the checkpoint, so scoring
+    # must not depend on RS_DINO_WEIGHTS_DIR pointing anywhere in particular.
+    model = instantiate(cfg.model.architecture, require_dino_weights=False)
+    model.to(device)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(checkpoint["state_dict"])
+    checkpoint.pop("state_dict")
+    model.info_from_checkpoint = checkpoint
+    return model
+
+
 def build_metrics(device: str | torch.device) -> dict:
     return {
         "psnr": PSNRMetric(device=device),
@@ -257,7 +298,7 @@ def main() -> None:
     use_cached_hub_repos()
 
     t0 = time.time()
-    model = VideoCodec.load_from_checkpoint(args.checkpoint, device=args.device).eval()
+    model = load_codec_respecting_target(args.checkpoint, device=args.device).eval()
     video_cfg = model.config.encoder.video
 
     metrics = build_metrics(args.device)

@@ -522,6 +522,145 @@ that size.
     rather than something more training would close, given the plateau's late-stage gains were
     already down to hundredths of a dB per hour.
 
+18. **Experiment 1: learned per-layer DINO aggregation** (`src/kmira/codec/variants/learned_layer_mix.py`).
+    mira's stock aggregation is `mean(7 hand-picked layers) + features[-1]`, a fixed point chosen
+    once in the paper. This variant exposes all 24 DINOv3-L layers and learns one scalar weight each
+    (ELMo-style layer mixing), initialised to reproduce the stock formula exactly -- 0 on the 17
+    unused layers, 1/7 on six stock layers, 8/7 on layer 23 (its mean share plus the separate
+    `+ features[-1]` term). Free weights, not softmax: the stock formula's effective weights sum to
+    2, which a normalised mixture could not represent. Costs no extra DINO compute -- layer 23 *is*
+    the final block, so the same forward pass already computes all 24 intermediates.
+
+    Three things had to be got right before this was runnable, each caught by checking rather than
+    assuming:
+
+    - **The consistency loss silently changes with the layer count.** `CodecLoss.bind_encoder_dino`
+      derives `DinoPerceptualLoss`'s layer set from `encoder.rae_dino.layers` and averages per-layer
+      MSE over exactly those. A 24-layer encoder therefore trains against a 24-layer consistency
+      loss where a stock one uses 7 -- a *different objective*, not just a different aggregation.
+      Racing the variant against `baseline_image_base` would have differed in two ways at once and
+      no PSNR delta could have been attributed to the idea. First fix was a paired control
+      (`VideoCodecFixedLayerMix`, the identical class with `layer_weights.requires_grad_(False)`),
+      which costs a second arm; **superseded in step 20** by pinning the loss instead. Verified along
+      the way: both arms expose 24 layers, both reproduce the stock latent at init to 1.4e-6, and
+      they differ by exactly 24 trainable parameters (114,188,320 vs 114,188,344).
+    - **`load_from_checkpoint` ignores `_target_`.** It hardcodes `VideoCodec(config, ...)`, so
+      scoring a variant checkpoint would build a *stock* encoder and then fail the strict
+      `load_state_dict` on the extra `encoder.layer_weights` -- an arm would train for hours and only
+      then fail at scoring. `eval_codec` now instantiates the saved `model.architecture` node through
+      Hydra (`load_codec_respecting_target`), which respects `_target_`; stock checkpoints are
+      unaffected since theirs names `mira.codec.VideoCodec`. Verified by round-tripping a real
+      variant checkpoint to disk and back.
+    - **`finetune_from` is strict.** Warm-starting from the stock baseline needs to tolerate exactly
+      one absent key. `src/kmira/finetune_allow_new_params.py` asserts the missing set is *exactly*
+      what the caller declared before loading, rather than passing a blanket `strict=False` that
+      would swallow a genuine future mismatch. Its own failure path was tested deliberately -- which
+      is how a bug in its idempotency guard was found (a marker check meant a second call with
+      different keys silently kept the first call's).
+
+19. **Crashed the machine, and why.** A smoke test hard-froze the PC. Post-mortem: `/tmp` is
+    **tmpfs -- RAM-backed** (16GB), and the smoke tests were writing 4.7GB checkpoints
+    (1.6GB weights + 3.0GB training state) into `/tmp/.../scratchpad`, i.e. straight into RAM, on
+    top of the trainer's own ~6-8GB, against 30GB total with only **512MB of swap** -- so a spike
+    hard-locks instead of degrading. The journal simply stops mid-run with no OOM or Xid message,
+    the signature of a lockup where nothing gets flushed. Two consequences, both permanent rules:
+    **never write checkpoints under `/tmp`** (use a gitignored dir on the real disk), and prefer
+    construction patterns that do not transiently hold several copies of a 300M-parameter backbone.
+    The variant originally built *three* DINOv3-L backbones (~1.2GB each) to keep one, by
+    constructing then replacing at both the encoder and codec level; it now hands `RAEEncoder` an
+    all-layers config so the backbone is built correctly the first time, and upgrades that instance
+    in place. Peak RSS for a full build: 2.96GB. The `torch.stack` in the aggregation was likewise
+    replaced with an in-place accumulation, dropping a redundant ~113MB copy of every layer.
+
+20. **Decoupled the consistency loss from the encoder's layer set, so one arm suffices.** Step 18
+    handled the objective confound by pairing the variant against a frozen-weight control — correct,
+    but it doubles the cost of every experiment that changes the encoder's layer exposure, and it
+    treats a fixable coupling as a fact of nature. `src/kmira/pin_consistency_loss_layers.py` patches
+    `CodecLoss.bind_encoder_dino` to build `DinoPerceptualLoss` over a *fixed* layer set regardless
+    of what the encoder reads, and the variant encoder returns only those 7 layers as
+    `dino_features`. The aggregation still sees all 24; the objective is held at the baseline's.
+    Applied via `KMIRA_PIN_CONSISTENCY_LAYERS` in the launcher, unset by default, so stock runs are
+    untouched.
+
+    **The pairing is a silent footgun and was checked numerically, not by inspection.**
+    `DinoPerceptualLoss.forward` does `for p, t in zip(pred_features, target_features)` — a
+    **non-strict** `zip`. If the encoder's returned targets and the pinned loss's layers ever
+    disagree, layers misalign (layer 11's prediction scored against layer 0's target) or the list
+    silently truncates; nothing raises, and training would quietly optimise the wrong thing. Two
+    checks: `tests/test_learned_layer_mix.py` asserts with `torch.equal` that layer *i* of a
+    24-layer `get_intermediate_layers` read is the *same tensor* as the matching entry of a native
+    7-layer read (the premise both the aggregation and the loss claims rest on — and not something
+    to assume about an API whose `n=` argument changes meaning between an int and a tuple), and a
+    one-off end-to-end comparison built a stock encoder plus its own unpinned `CodecLoss` alongside
+    the variant plus the pinned one and ran both on identical input:
+
+    ```
+    targets: identical tensors at every position
+    latent max abs diff      : 1.311e-06
+    stock   consistency loss : 0.0000017442
+    variant consistency loss : 0.0000017442
+    abs diff                 : 0.000e+00
+    ```
+
+    So the variant can now be run **alone** and compared against the locked baseline's 24.885 dB.
+    The control arm survives as optional (`run_learned_layer_mix_warmstart.sh 4 control,learned_mix`)
+    for the one thing a single arm still cannot separate: the **warm restart itself**. The baseline
+    was annealed to its minimum LR, and `finetune_from` resets the optimizer and re-applies warmup +
+    constant LR — leaving an annealed minimum at a raised LR costs quality before it regains any, so
+    a first-hour dip below 24.885 is expected *whether or not the idea works* and must not be read
+    as a negative result.
+
+    The control-free signal is the **weights themselves**, printed by
+    `codec/scripts/report_layer_mix.py`. They start at exactly the stock formula's values, so where
+    they move is a direct read on whether the gradient wants a different layer combination at all —
+    unaffected by the LR restart. Barely-moved weights say the hand-picked formula was already near
+    a local optimum, whatever PSNR happens to be doing that hour; mass appearing on the 17
+    previously-unused layers is the positive signal.
+
+    Also fixed here: the variant's `forward` had dropped stock `RAEEncoder.forward`'s RAEv2 noise
+    regulariser. Inert at our `noise_tau: 0.0`, but a silent divergence from stock the day any
+    experiment turns it on. Restored verbatim.
+
+21. **The warm-start comparison number is 24.747, not 24.885 — and "recovering to convergence" is
+    the wrong mental model.** Asked how long a warm-started run needs to shake off the anneal and
+    re-converge, the premise turned out to be the thing to fix. The two baseline numbers are:
+
+    | | LR | PSNR |
+    |---|---|---|
+    | plateau, step 272,000 | constant 1e-4 | **24.747** |
+    | annealed, step 304,000 | cosine 1e-4 -> 1e-6 over 32k | **24.885** |
+
+    The +0.138 dB is a **property of the low LR**, not a better region of parameter space that
+    training found and can find again. `finetune_from` resets the optimizer and re-applies
+    warmup + constant 1e-4, which hands that 0.138 dB straight back. So a constant-LR run can never
+    reach 24.885 *however long it runs* — and there is no "re-convergence" to wait for, because
+    24.747 is precisely where the baseline had already converged at 1e-4 (24.736 -> 24.747 over its
+    final 8,000 steps). The restart does not knock the model off a plateau it must climb back; it
+    drops it onto one it is already sitting on.
+
+    Practical consequences:
+
+    - **Compare against 24.747.** Both it and the variant's number are then constant-LR-1e-4
+      equilibria, which is an apples-to-apples comparison. `report_layer_mix.py` prints both columns
+      with the annealed one labelled unreachable, so it cannot be mistaken for a target.
+    - **The settling is short, not hours.** It is a step change in LR plus zeroed Adam moments, not a
+      re-traversal of the 272k-step training curve. Unmeasured so far, so the first hour's
+      validation curve (8 readings at `val_every=1000`) is what establishes it; expect PSNR to fall
+      from 24.885 toward ~24.75 and flatten.
+    - **Beating the plateau is the result; annealing turns it into a headline number.** If the
+      variant settles meaningfully above 24.747, re-anneal with `run_anneal.sh`'s recipe to get a
+      number directly comparable to 24.885.
+    - **The noise floor at convergence is still unknown** (step 13's 1.14 dB measured unconverged
+      runs and does not apply). The variant is a *paired* warm start — same checkpoint, same seed,
+      identical at step 0 — so it is far tighter than that, but a small positive delta should be
+      confirmed with the control arm rather than believed.
+
+    Also fixed here: this runner had a **fixed** `run.seed` across chunks, reintroducing step 14's
+    data-repetition bug (mira reseeds its train loader per process start and does not checkpoint it,
+    so every hourly chunk would replay the identical ~32k-sample stream). Now derived from the chunk
+    index, which keeps the two arms paired — each arm's chunk N draws the same data — while still
+    advancing the stream.
+
 ## Running a training session
 
 ```bash

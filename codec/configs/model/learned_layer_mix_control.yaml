@@ -1,0 +1,62 @@
+# OPTIONAL PAIRED CONTROL for model/learned_layer_mix.yaml -- identical in every respect except
+# that the per-layer aggregation weights are frozen at their stock-equivalent initialisation.
+#
+# Not needed for a first look. The DINO latent-consistency loss is pinned to the baseline's 7 layers
+# at launch (KMIRA_PIN_CONSISTENCY_LAYERS in run_learned_layer_mix_warmstart.sh), so the variant's
+# objective already matches the baseline's and it can be run alone.
+#
+# This arm exists to absorb the WARM-RESTART penalty: finetune_from resets the optimizer and raises
+# the LR on a checkpoint that was annealed to its minimum, which costs quality regardless of the
+# idea. Both arms pay it identically, so the arm-to-arm delta isolates the aggregation change.
+#
+# See ../../../src/kmira/codec/variants/learned_layer_mix.py (VideoCodecFixedLayerMix).
+
+loss:
+  _target_: mira.codec.CodecLoss
+  _convert_: all
+
+  weights:
+    _target_: mira.codec.CodecLossWeights
+    loss_mae: 1.0
+    loss_lpips_perceptual: 1.0
+    lpips_perceptual_frame_frac: 1.0
+    loss_dino_latent_consistency: 1.0
+    dino_latent_consistency_frame_frac: 1.0
+    compile_dino: ${run.compile}
+    auto_weight: true
+
+architecture:
+  _target_: kmira.codec.variants.learned_layer_mix.VideoCodecFixedLayerMix
+  _convert_: all
+
+  config:
+    _target_: mira.codec.VideoCodecConfig
+    encoder:
+      latent_dim: 32
+      rae_model: dinov3_vitl16
+      aggregation_layers: [11, 13, 15, 17, 19, 21, 23]
+      bottleneck:
+        stride: 2
+        temporal_stride: 1
+        noise_tau: 0.0
+      compile_dino: ${run.compile}
+      video:
+        height: 288
+        width: 512
+        channels: 3
+        timesteps: 1
+        fps: 20
+
+    decoder:
+      latent_dim: ${..encoder.latent_dim}
+      activation_checkpointing: true
+      bottleneck:
+        stride: ${...encoder.bottleneck.stride}
+      vit_width: 768
+      vit_depth: 12
+      vit_num_heads: 12
+      mlp_dim_multiplier: 4
+      qk_norm: layernorm
+      patch_size: 16
+      patch_size_t: 1
+      video: ${..encoder.video}
