@@ -37,12 +37,16 @@ Two gated downloads are needed, from **different places** — a detail that is e
 
 - **DINOv3 weights**, from [Meta's DINOv3 page](https://ai.meta.com/resources/models-and-libraries/dinov3-downloads/)
   (not the HuggingFace `facebook/dinov3-*` repos, which ship `safetensors` rather than the `.pth`
-  files mira's `torch.hub` loader wants). Both files go in `data/dino_weights/`:
+  files mira's `torch.hub` loader wants). Both files go in `~/projects/shared/dino_weights/`,
+  a shared store other projects point at too rather than each keeping a copy:
   `dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth` (the codec's frozen encoder) and
   `dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth` (used by the benchmark metrics).
 - **The dataset**, [`kyutai/rocket-science`](https://huggingface.co/datasets/kyutai/rocket-science)
   on HuggingFace — gated separately from the weights. `hf auth login`, then see
   [codec/README.md](codec/README.md) step 5 for pulling a shard subset.
 
-`.envrc` (direnv) activates the pixi environment and sets `RS_DINO_WEIGHTS_DIR` automatically on
-`cd`; set it by hand if you don't use direnv.
+`.envrc` (direnv) activates the pixi environment and points `RS_DINO_WEIGHTS_DIR` at
+`~/projects/shared/dino_weights` and `MIRA_TRAIN` at `../mira/scripts/train_codec.py`
+automatically on `cd`; set them by hand if you don't use direnv. A value you have already
+exported wins over the default, so a single run can point at different weights or a different
+mira checkout without editing anything.

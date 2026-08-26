@@ -34,12 +34,15 @@ entire divergence from mira is configuration (see step 11).
    encoder) and `dinov3_vitb16_...` (used by mira's eval metrics, `DinoForMetrics`). Both come from
    Meta's own gated download page, **not** the HuggingFace `facebook/dinov3-*` repos — those only
    ship `model.safetensors` (transformers format), not the `.pth` files mira's `torch.hub`-based
-   loader expects. Placed at `../data/dino_weights/`, pointed to via `RS_DINO_WEIGHTS_DIR` (set
-   automatically by `../.envrc` via direnv).
+   loader expects. Kept at `~/projects/shared/dino_weights/` — shared across projects rather than
+   living inside this one — and pointed to via `RS_DINO_WEIGHTS_DIR` (defaulted by `../.envrc`
+   via direnv, and by each `codec/scripts/run_*.sh`; an already-exported value overrides it).
 
 2. **Environment.** `pixi` (not a Python package — a standalone conda+PyPI env/task manager)
    installed via the official installer script; `pixi run setup` builds the env with mira installed
-   editable from `../../mira`.
+   editable from `../../mira`. Training scripts also need `MIRA_TRAIN`, mira's own
+   `scripts/train_codec.py` (defaulted to `../mira/scripts/train_codec.py` by `../.envrc` via
+   direnv; set it by hand if you don't use direnv).
 
 3. **Verified the stock forward pass manually** before automating anything: loaded `baseline.yaml`
    via Hydra, instantiated `mira.codec.VideoCodec`, ran a real forward pass on GPU. Output shapes

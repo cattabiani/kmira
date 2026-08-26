@@ -73,11 +73,12 @@ VAL_EVERY=1000
 SCORE_SECONDS=372
 TOTAL=$((HOURS * CHUNK))
 WARMUP=200                           # short: fine-tuning a converged model, not training from 0
-MIRA_TRAIN="$PWD/codec/scripts/train_codec_finetune_hub.py"
+HUB_SCRIPT="$PWD/codec/scripts/train_codec_finetune_hub.py"
 
 if command -v pixi >/dev/null 2>&1; then PIXI=pixi; else PIXI="$HOME/.pixi/bin/pixi"; fi
 
-export RS_DINO_WEIGHTS_DIR="$PWD/data/dino_weights"
+export MIRA_TRAIN="${MIRA_TRAIN:?set by ../.envrc via direnv, or export it by hand}"
+export RS_DINO_WEIGHTS_DIR="${RS_DINO_WEIGHTS_DIR:-$HOME/projects/shared/dino_weights}"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # Hold the DINO latent-consistency loss at the baseline's 7 layers even though the encoder now reads
 # all 24, so the objective is unchanged and only the aggregation differs. Must match STOCK_LAYERS in
@@ -157,7 +158,7 @@ run_arm () {
 
     local train_ok=0
     for attempt in 1 2 3 4 5; do
-      if KMIRA_FINETUNE_NEW_KEYS="$new_keys" "$PIXI" run python "$MIRA_TRAIN" \
+      if KMIRA_FINETUNE_NEW_KEYS="$new_keys" "$PIXI" run python "$HUB_SCRIPT" \
         --config-dir="$PWD/codec/configs" \
         --config-name=kmira_train_codec \
         model="$model" \

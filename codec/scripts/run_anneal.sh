@@ -37,11 +37,12 @@ VAL_EVERY=1000
 # src/kmira/lr_resume_override.py -- confirmed with a standalone scheduler test before trusting it
 # against 34 hours of training: resuming at step 10 with a freshly-configured 8-step decay produced
 # a clean cosine 1e-4 -> 1e-6, exactly as specified, not silently flat).
-MIRA_TRAIN="$PWD/codec/scripts/train_codec_anneal_hub.py"
+HUB_SCRIPT="$PWD/codec/scripts/train_codec_anneal_hub.py"
 
 if command -v pixi >/dev/null 2>&1; then PIXI=pixi; else PIXI="$HOME/.pixi/bin/pixi"; fi
 
-export RS_DINO_WEIGHTS_DIR="$PWD/data/dino_weights"
+export MIRA_TRAIN="${MIRA_TRAIN:?set by ../.envrc via direnv, or export it by hand}"
+export RS_DINO_WEIGHTS_DIR="${RS_DINO_WEIGHTS_DIR:-$HOME/projects/shared/dino_weights}"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 current_step () {
@@ -111,7 +112,7 @@ while [ "$(current_step)" -lt "$TOTAL" ]; do
 
   TRAIN_OK=0
   for attempt in 1 2 3 4 5; do
-    if "$PIXI" run python "$MIRA_TRAIN" \
+    if "$PIXI" run python "$HUB_SCRIPT" \
       --config-dir="$PWD/codec/configs" \
       --config-name=kmira_train_codec \
       model=baseline_image_base \

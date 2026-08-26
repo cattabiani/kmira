@@ -63,7 +63,7 @@ LOG="checkpoints/calibration/${NAME}.log"
 # A launcher around mira's unmodified trainer, not a fork: it patches torch.hub to resolve the
 # DINOv3 repo ref from the local cache instead of asking GitHub on every single model construction,
 # then runs mira's script as __main__. See src/kmira/torch_hub_offline.py.
-MIRA_TRAIN="$PWD/codec/scripts/train_codec_offline_hub.py"
+HUB_SCRIPT="$PWD/codec/scripts/train_codec_offline_hub.py"
 
 # Cadences are WALL-CLOCK, not a fraction of the run: a percentage would mean a short slot and a
 # long slot have different spacing, so their curves could not be laid end to end. mira's
@@ -88,7 +88,8 @@ VAL_PER_HOUR=$((CHUNK / VAL_EVERY))
 
 if command -v pixi >/dev/null 2>&1; then PIXI=pixi; else PIXI="$HOME/.pixi/bin/pixi"; fi
 
-export RS_DINO_WEIGHTS_DIR="$PWD/data/dino_weights"
+export MIRA_TRAIN="${MIRA_TRAIN:?set by ../.envrc via direnv, or export it by hand}"
+export RS_DINO_WEIGHTS_DIR="${RS_DINO_WEIGHTS_DIR:-$HOME/projects/shared/dino_weights}"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 mkdir -p "$OUT" codec/results
@@ -230,7 +231,7 @@ while [ "$(current_step)" -lt "$TOTAL" ]; do
   # network confirmed fine moments after the script gave up.
   TRAIN_OK=0
   for attempt in 1 2 3 4 5; do
-    if "$PIXI" run python "$MIRA_TRAIN" \
+    if "$PIXI" run python "$HUB_SCRIPT" \
       --config-dir="$PWD/codec/configs" \
       --config-name=kmira_train_codec \
       model=baseline_image_base \

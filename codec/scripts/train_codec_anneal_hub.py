@@ -9,13 +9,14 @@
 
 from __future__ import annotations
 
+import os
 import runpy
 import sys
 
 from kmira.lr_resume_override import use_new_schedule_on_resume
 from kmira.torch_hub_offline import use_cached_hub_repos
 
-MIRA_TRAIN = "/home/katta/projects/mira/scripts/train_codec.py"
+MIRA_TRAIN = os.environ["MIRA_TRAIN"]
 
 
 def main() -> None:

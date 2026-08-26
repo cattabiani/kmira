@@ -24,12 +24,12 @@ STEPS="${1:-15300}"                 # 15,300 steps @ 0.47 s/step ~= 2h per run
 # exceed a short probe's total steps and leave decay_steps negative (assertion in mira's scheduler).
 WARMUP=$(( STEPS / 10 )); [ "$WARMUP" -gt 1000 ] && WARMUP=1000; [ "$WARMUP" -lt 1 ] && WARMUP=1
 DECAY=$((STEPS - WARMUP))
-MIRA_TRAIN=/home/katta/projects/mira/scripts/train_codec.py
+MIRA_TRAIN="${MIRA_TRAIN:?set by ../.envrc via direnv, or export it by hand}"
 
 # pixi is on PATH in an interactive shell (installer appends to ~/.bashrc) but not necessarily here.
 if command -v pixi >/dev/null 2>&1; then PIXI=pixi; else PIXI="$HOME/.pixi/bin/pixi"; fi
 
-export RS_DINO_WEIGHTS_DIR="$PWD/data/dino_weights"
+export RS_DINO_WEIGHTS_DIR="${RS_DINO_WEIGHTS_DIR:-$HOME/projects/shared/dino_weights}"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 mkdir -p checkpoints/calibration codec/results

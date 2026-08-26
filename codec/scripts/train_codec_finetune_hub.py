@@ -28,7 +28,7 @@ from kmira.finetune_allow_new_params import allow_new_params_on_finetune
 from kmira.pin_consistency_loss_layers import pin_consistency_loss_layers
 from kmira.torch_hub_offline import use_cached_hub_repos
 
-MIRA_TRAIN = "/home/katta/projects/mira/scripts/train_codec.py"
+MIRA_TRAIN = os.environ["MIRA_TRAIN"]
 
 
 def main() -> None:
