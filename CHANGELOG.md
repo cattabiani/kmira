@@ -61,9 +61,23 @@ gap, a reintroduced fixed-seed data-repetition bug, a dropped RAEv2 noise regula
 variant's forward pass, and the variant wastefully building three DINOv3-L backbones instead of one.
 
 Warm-start-ready; comparison number to use is the constant-LR plateau (24.747), not the annealed
-one (24.885), since the warm-start run doesn't anneal. Result of the actual comparison not yet
-recorded here — check `codec/README.md` steps 20-21 and `codec/results/benchmark.jsonl` for the
-current numbers.
+one (24.885), since the warm-start run doesn't anneal.
+
+## 2026-08-26 -- 2026-09-05 — Experiment 1 result: the idea works
+
+Ran the warm-started comparison across several sessions. `learned_mix` climbed from the 24.75dB
+plateau to **27.429dB** by step 136,000 — 2.68dB above where it started, and 0.17dB from the
+paper's own Base-decoder reference (27.6dB) — while the paired control (identical run, aggregation
+weights frozen) never left the plateau's neighborhood, staying at 24.5-24.7dB throughout. That
+divergence is the result: the gain is the learned aggregation itself, not an artifact of extra
+training on a restarted optimizer.
+
+The curve was not a smooth climb — a dip at 80k-96k steps briefly looked like a second plateau
+before a jump to 104,000 resumed it, the same false-plateau shape the original baseline run hit
+during its own search (2026-08-13). Kept running rather than stopped early, on the same reasoning.
+Still climbing as of the last reading (136,000 steps); training continues, with an anneal planned
+once several consecutive readings show near-zero movement. See `codec/README.md` step 22 and
+`codec/results/benchmark.jsonl` for the full trajectory.
 
 ## 2026-08-26 — Publishing pass
 
