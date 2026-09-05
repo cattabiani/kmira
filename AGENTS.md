@@ -17,14 +17,12 @@ DINOv3-L feature extractor -> learned bottleneck -> ViT decoder) that MIRA's wor
 predictions in. Not the world model itself yet, though the layout (`codec/`, with other parts
 getting their own sibling subfolder later) anticipates that.
 
-**Read `README.md` first, then `codec/README.md`.** The latter is the detailed, numbered account
-of every step taken so far — environment setup, dataset/weight gating, bugs found and fixed, the
-calibration methodology, and the reasoning behind every non-obvious decision (e.g. why the Base
-decoder instead of XL, why batch size doesn't buy throughput on this GPU). `CHANGELOG.md` is the
-higher-level narrative version of the same history — read that instead if you just want the gist
-without the full step-by-step. Don't duplicate content between `codec/README.md` and
-`CHANGELOG.md`; add new work to `codec/README.md`'s numbered steps and summarize the milestone in
-`CHANGELOG.md` when it's done.
+**Read `README.md` first, then `codec/README.md`.** The latter is a current-state reference —
+layout, how to run things, the locked baseline, where each experiment stands — not a history. For
+*why* things are the way they are, `git log` carries it (commit messages are written with that
+detail) and `CHANGELOG.md` is the narrative summary. Don't let `codec/README.md` grow back into a
+changelog: new work updates its "Current state" section and gets a real commit message; the
+reasoning trail lives in the commit, not in prose duplicated across files.
 
 ## The goal
 
@@ -38,10 +36,11 @@ much smaller, single-GPU scale, using paired A/B comparisons against a locked ba
 - A calibrated, plateaued, annealed **baseline codec** is locked at
   `checkpoints/calibration/plateau_baseline/checkpoint-304000` (304k steps, PSNR 24.88). This is
   the fixed comparison point for every future variant.
-- **Experiment 1** (learned per-DINO-layer aggregation, replacing mira's fixed 7-layer mean) is
-  built and warm-start-ready; see `codec/README.md` steps 16-21 and
-  `src/kmira/codec/variants/learned_layer_mix.py`. Check `codec/results/benchmark.jsonl` for
-  whatever the latest recorded comparison numbers are — don't assume the outcome from this file.
+- **Experiment 1** (learned per-DINO-layer aggregation, replacing mira's fixed 7-layer mean) works:
+  warm-started from the locked baseline, reached 27.429 dB by step 136,000 (+2.68 over the plateau
+  it started from) while a paired frozen-weight control stayed flat. Still running. See
+  `codec/README.md`'s "Current state" and `codec/results/benchmark.jsonl` (tags `learned_mix-*` /
+  `control-*`) for the latest numbers — don't assume the outcome from this file.
 - Hardcoded paths were removed in favor of `direnv` (`.envrc`) + two env vars
   (`RS_DINO_WEIGHTS_DIR`, `MIRA_TRAIN`) so the repo isn't tied to one machine.
 
@@ -62,7 +61,46 @@ much smaller, single-GPU scale, using paired A/B comparisons against a locked ba
   attributable to the idea and not to an incidental change riding along with it.
 - `checkpoints/` and `data/` are gitignored and local-only, shared across every part of this
   project (not nested under `codec/`). Don't expect them to be present after a fresh clone —
-  `codec/README.md` has the steps to regenerate them (gated downloads + training).
+  see `README.md`'s Setup section (gated downloads) and `codec/README.md` (training).
+
+## Gotchas that will bite you again if forgotten
+
+Non-obvious facts about mira and this environment, each found the hard way once already. Re-finding
+any of these costs real time or a real bug, so they live here rather than only in git history.
+
+- **`VideoCodec`'s video tensors are in `[-1, 1]`, not `[0, 1]`.** Every mira metric and
+  visualization utility expects `[0, 1]` — convert with `(x + 1) / 2` before scoring. Getting this
+  wrong doesn't error, it silently zeroes every negative pixel (a real PSNR once scored *worse than
+  a flat gray image* because of this).
+- **mira's train loader reseeds from `run.seed` on every process start and is not checkpointed.** A
+  script that restarts training in chunks (to checkpoint/score hourly, say) with a fixed seed
+  replays the *identical* data stream on every restart. Vary the seed per chunk (see
+  `run_plateau.sh`, `run_learned_layer_mix_warmstart.sh`).
+- **`CodecLoss.bind_encoder_dino` derives the DINO latent-consistency loss's layer set from the
+  encoder's own layers.** Changing which DINO layers the encoder reads silently changes the
+  training *objective* too, not just the aggregation — unless pinned
+  (`src/kmira/pin_consistency_loss_layers.py`). The pairing between the encoder's returned features
+  and the loss's targets goes through a **non-strict** `zip`, so a mismatch misaligns layers
+  silently instead of raising; verify numerically, not by inspection.
+- **`VideoCodec.load_from_checkpoint` ignores `_target_` and always rebuilds a stock `VideoCodec`.**
+  Loading a variant checkpoint through it fails the strict `load_state_dict` on any extra
+  parameters — after paying for the training time, not before. Instantiate through Hydra instead
+  (`load_codec_respecting_target` in `eval_codec.py`).
+- **`torch.hub` does an unconditional GitHub `urlopen` even when the repo is already cached
+  locally**, and its `except URLError` doesn't catch `RemoteDisconnected` — one dropped connection
+  crashes model construction outright. `src/kmira/torch_hub_offline.py` patches it to resolve from
+  the cache first.
+- **`/tmp` is tmpfs (RAM-backed), and this machine has only ~512MB of swap.** A memory spike (e.g.
+  writing a multi-GB checkpoint there) hard-locks the machine instead of degrading gracefully.
+  Never write checkpoints or large scratch files under `/tmp`.
+- **Annealing a converged constant-LR run to a low LR buys real dB that constant LR alone never
+  reaches — but that gain is a property of the low LR, not a better region of parameter space.** A
+  warm start (`finetune_from`) resets the optimizer and raises the LR back up, so it can never reach
+  the annealed number no matter how long it runs. Compare a constant-LR warm-start against the
+  pre-anneal plateau, not the post-anneal one.
+- **Calling a plateau/elbow needs several trailing readings, not one flat stretch.** This project
+  has hit real false plateaus more than once — a multi-hour flat stretch followed by a further jump
+  of over 1 dB. Stopping on the first flat reading has already cost real signal here.
 
 ## Setup, if you need to run anything
 

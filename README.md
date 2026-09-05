@@ -13,8 +13,7 @@ rather than vendoring the whole codec, so diffs against mira stay small and expl
 ## Layout
 
 - `codec/` — everything for the codec benchmark: Hydra configs, training/launch scripts, output
-  images. See [codec/README.md](codec/README.md) for the steps taken so far and how to reproduce
-  them.
+  images. See [codec/README.md](codec/README.md) for current state and how to run things.
 - `src/kmira/codec/` — thin assembly of a `VideoCodec` from mira's classes plus our own variants.
   - `variants/` — forked/modified pieces (e.g. an alternative bottleneck), one file per idea.
 - `src/kmira/benchmark/` — codec benchmark scripts: `eval_codec.py` (reconstruction metrics — PSNR,
@@ -42,8 +41,11 @@ Two gated downloads are needed, from **different places** — a detail that is e
   `dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth` (the codec's frozen encoder) and
   `dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth` (used by the benchmark metrics).
 - **The dataset**, [`kyutai/rocket-science`](https://huggingface.co/datasets/kyutai/rocket-science)
-  on HuggingFace — gated separately from the weights. `hf auth login`, then see
-  [codec/README.md](codec/README.md) step 5 for pulling a shard subset.
+  on HuggingFace — gated separately from the weights. `hf auth login`, then pull a shard subset via
+  `RocketScienceDataset.from_hub(shards=N)` and write **restricted** local `index.json` files
+  (`data/rocket_science/{train,test}/`) listing only the downloaded shards — the raw snapshot's own
+  `index.json` references the entire 2,821-shard/7.6TB split, so pointing a trainer at it directly
+  fails on shards you never downloaded.
 
 `.envrc` (direnv) activates the pixi environment and points `RS_DINO_WEIGHTS_DIR` at
 `~/projects/shared/dino_weights` and `MIRA_TRAIN` at `../mira/scripts/train_codec.py`

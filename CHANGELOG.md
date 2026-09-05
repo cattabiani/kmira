@@ -2,8 +2,9 @@
 
 A log of what happened in this repo, in order. Written for a human (or a future agent session)
 skimming for "what's the state of things and how did we get here" — not a commit-by-commit mirror
-of `git log`. See `codec/README.md` for the detailed, step-numbered account of the codec work
-specifically; this file is the higher-level narrative across the whole project.
+of `git log`. See `codec/README.md` for the codec work's current state and how to run things; this
+file is the higher-level narrative across the whole project (the detailed reasoning trail lives in
+commit messages, not duplicated into a file).
 
 ## 2026-08-10 -- 2026-08-13 — Baseline codec benchmark (milestone)
 
@@ -76,8 +77,8 @@ The curve was not a smooth climb — a dip at 80k-96k steps briefly looked like 
 before a jump to 104,000 resumed it, the same false-plateau shape the original baseline run hit
 during its own search (2026-08-13). Kept running rather than stopped early, on the same reasoning.
 Still climbing as of the last reading (136,000 steps); training continues, with an anneal planned
-once several consecutive readings show near-zero movement. See `codec/README.md` step 22 and
-`codec/results/benchmark.jsonl` for the full trajectory.
+once several consecutive readings show near-zero movement. See `codec/README.md`'s "Current state"
+and `codec/results/benchmark.jsonl` for the full trajectory.
 
 ## 2026-08-26 — Publishing pass
 

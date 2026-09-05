@@ -35,7 +35,8 @@ from kmira.codec.variants.learned_layer_mix import (
 # annealing 1e-4 -> 1e-6 over 32,000 steps, which bought +0.138 dB. That gain is a property of the
 # LOW LR, not of a better parameter region: raise the LR back to 1e-4 and it is given straight back.
 # A constant-LR run can therefore never reach 24.885, no matter how long it runs, and "it is still
-# below 24.885" says nothing about the experiment. See codec/README.md step 21.
+# below 24.885" says nothing about the experiment. See AGENTS.md's gotcha on annealed vs
+# constant-LR baselines.
 CONSTANT_LR_PLATEAU = 24.747
 LOCKED_BASELINE_PSNR = 24.885
 ANNEAL_GAIN = LOCKED_BASELINE_PSNR - CONSTANT_LR_PLATEAU
