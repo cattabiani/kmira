@@ -664,6 +664,45 @@ that size.
     index, which keeps the two arms paired — each arm's chunk N draws the same data — while still
     advancing the stream.
 
+22. **Experiment 1 result, running through 2026-09-05: the idea works, clearly.** Continued past the
+    first hour across several sessions:
+
+    | step | learned_mix | control |
+    |---|---|---|
+    | 8,000 | 24.742 | 24.506 |
+    | 24,000 | 24.459 | 23.833 |
+    | 40,000 | 25.673 | 24.713 |
+    | 56,000 | 26.316 | 24.727 |
+    | 72,000 | 26.592 | — |
+    | 96,000 | 26.260 | — |
+    | 104,000 | 26.898 | — |
+    | 120,000 | 27.248 | — |
+    | 136,000 | **27.429** | — |
+
+    `control` never leaves the neighbourhood of the original plateau (24.75) — it is, as designed,
+    absorbing the warm-restart penalty and nothing else. `learned_mix` passes it by step 32,000 and
+    keeps climbing, reaching **27.429 at 136,000 steps** — 2.68 dB above the plateau it warm-started
+    from, and **0.17 dB from the paper's Base-decoder reference (27.6)**. Confirms the calibration
+    finding was real and reproduces here for a second, unrelated reason: `control` stalling while
+    `learned_mix` climbs is exactly the signature that says the gain is the aggregation, not extra
+    training on a restarted optimizer.
+
+    `control` was not kept in lockstep past 56,000 steps — once it was clearly not going to move,
+    running it further step-for-step traded real GPU time for a confirmation already in hand. It
+    remains available to resume if a clean step-matched delta is ever needed for a headline number.
+
+    The curve is not a smooth climb: step 16k–24k dips (restart settling, expected per step 21), then
+    a clean rise to 72,000, then a second dip at 80k–96k, then a jump to 104,000 that resumes the
+    climb. This is the same false-plateau shape the original plateau run showed twice (step 15) —
+    stopping at the 96,000 reading would have looked like convergence at 26.26 and missed the next
+    +1.17 dB. Treat any future flat stretch here the same way: several readings, not one, before
+    calling it an elbow.
+
+    Still climbing at the last reading (+0.058 over the last 8,000 steps, down from +0.12 the
+    reading before — slowing, not yet flat). Continuing overnight from here; anneal once several
+    consecutive readings show near-zero movement, the same criterion used to call the original
+    plateau at step 17.
+
 ## Running a training session
 
 ```bash

@@ -2,9 +2,14 @@
 # Warm-started experiment: does a learned per-DINO-layer combination beat the stock fixed formula,
 # starting from the locked baseline (checkpoint-304000) rather than from scratch?
 #
-#   bash codec/scripts/run_learned_layer_mix_warmstart.sh 1                   # 1h, variant only
-#   bash codec/scripts/run_learned_layer_mix_warmstart.sh 4                   # 4h, variant only
+#   bash codec/scripts/run_learned_layer_mix_warmstart.sh 1                   # 1h MORE, variant only
+#   bash codec/scripts/run_learned_layer_mix_warmstart.sh 4                   # 4h MORE, variant only
 #   bash codec/scripts/run_learned_layer_mix_warmstart.sh 4 control,learned_mix  # + paired control
+#
+# HOURS IS RELATIVE, NOT ABSOLUTE: each arm resumes from wherever its own checkpoint directory
+# currently sits and trains HOURS more from there -- an arm at step 64000 given HOURS=7 runs to
+# 120000 (64000 + 7*8000), not to 56000. The two arms can be at different step counts (e.g. after
+# running them for different total hours across sessions) and each still gets exactly HOURS more.
 #
 # DEFAULT IS ONE ARM: `learned_mix` (VideoCodecLearnedLayerMix). The cheap first pass -- run the
 # idea, look at what it does, decide whether it earns a controlled comparison.
@@ -45,9 +50,9 @@ cd "$(dirname "$0")/../.."
 HOURS="${1:-4}"
 ARMS="${2:-learned_mix}"
 case "$HOURS" in
-  ''|*[!0-9]*) echo "usage: $0 <whole hours per arm> [arms]   (got '$HOURS')" >&2; exit 1 ;;
+  ''|*[!0-9]*) echo "usage: $0 <whole hours MORE, per arm> [arms]   (got '$HOURS')" >&2; exit 1 ;;
 esac
-[ "$HOURS" -lt 1 ] && { echo "usage: $0 <whole hours per arm>, minimum 1" >&2; exit 1; }
+[ "$HOURS" -lt 1 ] && { echo "usage: $0 <whole hours MORE, per arm>, minimum 1" >&2; exit 1; }
 
 for arm in ${ARMS//,/ }; do
   case "$arm" in
@@ -71,7 +76,6 @@ SEED_BASE=28
 CHUNK=8000                           # one hour at 0.45 s/step, same grid as the other scripts
 VAL_EVERY=1000
 SCORE_SECONDS=372
-TOTAL=$((HOURS * CHUNK))
 WARMUP=200                           # short: fine-tuning a converged model, not training from 0
 HUB_SCRIPT="$PWD/codec/scripts/train_codec_finetune_hub.py"
 
@@ -121,26 +125,31 @@ score_checkpoint () {
   exit 1
 }
 
-# Runs one arm to $TOTAL steps: chunked, scored before each further chunk (see run_plateau.sh's
-# captain's-log entry for why that ordering -- not after -- avoids orphaning a trained checkpoint if
-# scoring fails), retried through the torch.hub flake.
+# Runs one arm HOURS more, from wherever it currently sits: chunked, scored before each further
+# chunk (see run_plateau.sh's captain's-log entry for why that ordering -- not after -- avoids
+# orphaning a trained checkpoint if scoring fails), retried through the torch.hub flake.
 run_arm () {
   local name="$1" model="$2" new_keys="$3" tag_prefix="$4"
   local out="$PWD/checkpoints/calibration/warmstart_${name}"
   local log="checkpoints/calibration/warmstart_${name}.log"
   mkdir -p "$out"
 
+  # Relative to THIS arm's own current step, not a shared/global target -- so two arms at different
+  # step counts (e.g. run for different total hours across sessions) each get exactly HOURS more.
+  local start_step; start_step="$(current_step "$out")"
+  local total=$((start_step + HOURS * CHUNK))
+
   echo ""
   echo "=================================================================="
-  echo " ARM $name   model=$model   target=$TOTAL steps (~${HOURS}h)"
+  echo " ARM $name   model=$model   +${HOURS}h: $start_step -> $total steps"
   echo "=================================================================="
 
   local chunk_n=0 n_chunks="$HOURS"
-  while [ "$(current_step "$out")" -lt "$TOTAL" ]; do
+  while [ "$(current_step "$out")" -lt "$total" ]; do
     local done_step; done_step="$(current_step "$out")"
     score_checkpoint "$out" "$tag_prefix" "$done_step"
 
-    local next=$((done_step + CHUNK)); [ "$next" -gt "$TOTAL" ] && next="$TOTAL"
+    local next=$((done_step + CHUNK)); [ "$next" -gt "$total" ] && next="$total"
     chunk_n=$((chunk_n + 1))
     local seed=$((SEED_BASE + done_step / CHUNK))
 
@@ -176,7 +185,7 @@ run_arm () {
         validation.val_n_samples=512 \
         validation.val_first=$([ "$done_step" -eq 0 ] && echo true || echo false) \
         optim.scheduler.warmup_steps=$WARMUP \
-        optim.scheduler.constant_steps=$((TOTAL - WARMUP)) \
+        optim.scheduler.constant_steps=$((total - WARMUP)) \
         optim.scheduler.decay_steps=0 \
         wandb.mode=disabled \
         $finetune_arg \
