@@ -64,21 +64,32 @@ variant's forward pass, and the variant wastefully building three DINOv3-L backb
 Warm-start-ready; comparison number to use is the constant-LR plateau (24.747), not the annealed
 one (24.885), since the warm-start run doesn't anneal.
 
-## 2026-08-26 -- 2026-09-05 — Experiment 1 result: the idea works
+## 2026-08-26 -- 2026-09-06 — Experiment 1 result: the idea works, and beats the paper
 
 Ran the warm-started comparison across several sessions. `learned_mix` climbed from the 24.75dB
-plateau to **27.429dB** by step 136,000 — 2.68dB above where it started, and 0.17dB from the
-paper's own Base-decoder reference (27.6dB) — while the paired control (identical run, aggregation
-weights frozen) never left the plateau's neighborhood, staying at 24.5-24.7dB throughout. That
-divergence is the result: the gain is the learned aggregation itself, not an artifact of extra
-training on a restarted optimizer.
+plateau to **27.905dB by step 200,000** — past the paper's own Base-decoder reference (27.6dB) —
+while the paired control (identical run, aggregation weights frozen) never left the plateau's
+neighborhood, staying at 24.5-24.7dB throughout. Not a PSNR-only effect: SSIM, LPIPS, P-DINO and
+rFDD all improved together, which rules out the aggregation gaming pixel error at perceptual
+quality's expense. The control's flatness is what makes this attributable to the learned
+aggregation itself, not extra training on a restarted optimizer.
 
-The curve was not a smooth climb — a dip at 80k-96k steps briefly looked like a second plateau
-before a jump to 104,000 resumed it, the same false-plateau shape the original baseline run hit
-during its own search (2026-08-13). Kept running rather than stopped early, on the same reasoning.
-Still climbing as of the last reading (136,000 steps); training continues, with an anneal planned
-once several consecutive readings show near-zero movement. See `codec/README.md`'s "Current state"
-and `codec/results/benchmark.jsonl` for the full trajectory.
+The curve was not a smooth climb — two separate dip-then-jump stretches (16k-24k restart settling,
+then 80k-96k followed by a jump at 104,000) — the same false-plateau shape the original baseline
+run hit during its own search (2026-08-13). Kept running rather than stopped early, on the same
+reasoning; still not fully flat at the last reading.
+
+**What the model actually learned is not a reweighting of the paper's layers — it abandoned them.**
+The 24 learned weights converged to ~92% of their (scale-normalized) mass on DINOv3's *shallowest*
+block, away from the mid/late blocks `{11,...,23}` the paper's formula reads. Checked against the
+paper's own text: that formula's rationale explicitly keeps a residual on the deepest block to
+preserve semantics for the *world model* that later predicts in this latent, and the paper's one
+layer-choice ablation (multi-layer vs. last-block-only) shows the multi-layer choice winning on
+downstream world-model metrics too, not just reconstruction. Nothing in the paper tests the regime
+this run landed in. So: a real, multi-metric win on the reconstruction benchmark, and a real open
+question about whether this latent will serve the world model as well — untested here, since this
+benchmark only measures reconstruction. See `codec/README.md`'s "Current state" and
+`codec/results/benchmark.jsonl` for the full trajectory.
 
 ## 2026-08-26 — Publishing pass
 

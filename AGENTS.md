@@ -37,8 +37,12 @@ much smaller, single-GPU scale, using paired A/B comparisons against a locked ba
   `checkpoints/calibration/plateau_baseline/checkpoint-304000` (304k steps, PSNR 24.88). This is
   the fixed comparison point for every future variant.
 - **Experiment 1** (learned per-DINO-layer aggregation, replacing mira's fixed 7-layer mean) works:
-  warm-started from the locked baseline, reached 27.429 dB by step 136,000 (+2.68 over the plateau
-  it started from) while a paired frozen-weight control stayed flat. Still running. See
+  warm-started from the locked baseline, reached 27.905 dB by step 200,000 — past the paper's own
+  Base-decoder reference (27.6) — while a paired frozen-weight control stayed flat. But the learned
+  weights didn't reweight the paper's layers, they abandoned them for DINOv3's shallowest block;
+  the paper's own reasoning for its layer choice is about preserving semantics *for the world
+  model*, and its one relevant ablation favors depth there too — so this is a proven reconstruction
+  win with an open question about the downstream latent, not a settled result. Still running. See
   `codec/README.md`'s "Current state" and `codec/results/benchmark.jsonl` (tags `learned_mix-*` /
   `control-*`) for the latest numbers — don't assume the outcome from this file.
 - Hardcoded paths were removed in favor of `direnv` (`.envrc`) + two env vars

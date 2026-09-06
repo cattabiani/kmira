@@ -72,10 +72,28 @@ Appendix Table 22 additionally ablates *which* DINO layers are aggregated — th
   `../AGENTS.md` about why those two numbers answer different questions.
 - **Experiment 1** (learned per-DINO-layer aggregation,
   `src/kmira/codec/variants/learned_layer_mix.py`): warm-started from the locked baseline, reached
-  **27.429 dB at 136,000 steps** — +2.68 over the plateau, 0.17 from the paper's Base-decoder
-  reference (27.6) — while the paired control (identical run, aggregation weights frozen) stayed
-  flat at ~24.7. Still climbing as of the last reading; check `results/benchmark.jsonl` (tags
-  `learned_mix-*` / `control-*`) for the current numbers, don't assume the outcome from this file.
+  **27.905 dB at 200,000 steps** — past the paper's Base-decoder reference (27.6), and not a
+  PSNR-only effect: SSIM/LPIPS/P-DINO/rFDD all improved together, while the paired control
+  (identical run, aggregation weights frozen) stayed flat at ~24.7 the whole time. Still climbing
+  as of the last reading (+0.07/8k steps). Check `results/benchmark.jsonl` (tags `learned_mix-*` /
+  `control-*`) for the current numbers, don't assume the outcome from this file.
+
+  **What changed**: the learned weights didn't reweight the paper's 7 blocks — they moved almost
+  entirely (~92% of the normalized vector) onto **layer 0**, the shallowest DINOv3 block, away from
+  the mid/late blocks `{11,...,23}` the stock formula uses. Read the *normalized* direction, not
+  the raw magnitudes — the aggregation's overall scale and the bottleneck projection's norm have an
+  exact scaling symmetry that weight decay resolves arbitrarily, so only relative weight is
+  identified.
+
+  **Caveat before treating this as final**: the paper's own DINOv3-L layer choice (`sections/4.method.tex`)
+  keeps a residual on the deepest selected block specifically to retain semantics that shallow
+  features lack, reasoning that matters for the *world model* which later predicts forward in this
+  latent, not just for reconstruction. Their one layer-choice ablation (multi-layer vs. last-block-only,
+  `sections/appendix.tex`) shows the multi-layer choice winning on downstream world-model metrics
+  (gFID/gFVD/gFDD), not just reconstruction — real evidence that latent semantics affect the world
+  model, not just paranoia. Nothing in the paper tests the regime our result landed in (layer 0
+  dominant, deep residual nearly gone), so "beats the paper on reconstruction" and "will be a good
+  latent for the world model" are separate claims — only the first has evidence behind it so far.
 
 ## Running things
 
