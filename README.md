@@ -25,8 +25,11 @@ run should be read against).
 layers with uniform weights, RAEv2's k=7 default, adopted unchanged. Replacing that with 24 learned
 per-layer weights, initialised to reproduce the stock formula exactly, gained **+3.16 dB PSNR over
 the 24.747 plateau** by step 200k, with SSIM, LPIPS, P-DINO and rFDD improving alongside it, while
-a paired control with the weights frozen stayed at 24.5-24.7 throughout. The flat control is what
-makes the gain attributable to the aggregation rather than to the warm restart.
+a paired control with the weights frozen stayed at 24.5-24.7. The flat control is what makes the
+gain attributable to the aggregation rather than to the warm restart, with one caveat currently
+open: the control has been run to 56k steps against the variant's 200k, so it has not yet been
+observed through the region where the variant's gain appeared. Extending it is the next thing to
+do (see AGENTS.md, "Next, in order").
 
 **What that does not show.** This benchmark scores reconstruction only. The learned weights put
 ~92% of their normalized mass on DINOv3's shallowest block, away from the deeper blocks mira's

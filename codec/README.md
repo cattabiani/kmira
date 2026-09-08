@@ -74,7 +74,10 @@ Appendix Table 22 additionally ablates *which* DINO layers are aggregated — th
   `src/kmira/codec/variants/learned_layer_mix.py`): warm-started from the locked baseline, reached
   **27.905 dB at 200,000 steps, +3.16 dB over the 24.747 plateau it started from**, and not a
   PSNR-only effect: SSIM/LPIPS/P-DINO/rFDD all improved together, while the paired control
-  (identical run, aggregation weights frozen) stayed flat at ~24.7 the whole time. Still climbing
+  (identical run, aggregation weights frozen) stayed flat at ~24.7 for every step it has been run.
+  Note the control is at 56,000 steps against this arm's 200,000, so it has not been observed
+  through the variant's jump at 104,000; extending it to a matched length is the current priority
+  (`../AGENTS.md`, "Next, in order"). Still climbing
   as of the last reading (+0.07/8k steps). Check `results/benchmark.jsonl` (tags `learned_mix-*` /
   `control-*`) for the current numbers, don't assume the outcome from this file.
 

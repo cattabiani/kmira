@@ -40,7 +40,10 @@ much smaller, single-GPU scale, using paired A/B comparisons against a locked ba
   warm-started from the locked baseline, reached 27.905 dB by step 200,000, +3.16 dB over the
   24.747 plateau it started from, while a paired frozen-weight control stayed flat. Do not compare
   that to the paper's 27.6 Base-decoder row: different setup, and this rig's own faithful baseline
-  sits at 24.75 where the paper's reaches 27.6. But the learned
+  sits at 24.75 where the paper's reaches 27.6. **The control is under-run**: it sits at step
+  56,000 against the variant's 200,000, so it has never been observed through the region where the
+  variant actually took off (a dip at 80k-96k, then a jump at 104,000). Closing that gap is the
+  current priority; see "Next, in order" below. But the learned
   weights didn't reweight the paper's layers, they abandoned them for DINOv3's shallowest block;
   the paper's own reasoning for its layer choice is about preserving semantics *for the world
   model*, and its one relevant ablation favors depth there too — so this is a proven reconstruction
@@ -49,6 +52,60 @@ much smaller, single-GPU scale, using paired A/B comparisons against a locked ba
   `control-*`) for the latest numbers — don't assume the outcome from this file.
 - Hardcoded paths were removed in favor of `direnv` (`.envrc`) + two env vars
   (`RS_DINO_WEIGHTS_DIR`, `MIRA_TRAIN`) so the repo isn't tied to one machine.
+
+## Next, in order
+
+Do these in sequence. Each one is cheap on its own and the order is deliberate: step 1 decides how
+much the existing result can be claimed at all, so it comes before any new idea.
+
+### 1. Run the control up to `learned_mix`'s length (priority)
+
+`learned_mix` is at 200,000 steps, `control` at 56,000. Every attribution claim in this repo, the
+CHANGELOG, and the experiment notes rests on the control staying flat, and the control has not been
+run through the steps where the variant's gain appeared. Until it has, "the control stayed flat
+throughout" describes 56k steps, not the comparison.
+
+```bash
+bash codec/scripts/run_learned_layer_mix_warmstart.sh 1 control    # 8k steps, ~1h + ~6min scoring
+```
+
+HOURS is relative and per arm: each invocation runs that many hours more from wherever the arm
+currently sits. Repeat until the control reaches ~200,000, roughly 18 hourly chunks, or at minimum
+past ~120,000 to clear the variant's jump at 104,000.
+
+**Pre-registered outcomes**, so this is not read after the fact:
+
+- Control stays at 24.5-24.7 through 200k: Experiment 1's attribution holds as written. Nothing to
+  change beyond deleting this caveat.
+- Control climbs materially after 56k: the warm-restart penalty was still unwinding and part of the
+  variant's gain is recovery rather than the aggregation. The headline weakens and must be
+  restated as the arm-to-arm gap at matched steps, not as +3.16 dB over the plateau. Say so
+  plainly in the CHANGELOG if it happens; do not quietly requote.
+- Control climbs a little: report the gap at matched steps and use that as the result.
+
+### 2. Experiment 2, `learn7` (see `experiments/2026-09-08-decompose-layer-mix/NOTES.md`)
+
+Not implemented yet. Three pieces, none large:
+
+1. A trainable-index option on `VideoCodecLearnedLayerMix` restricting which layer weights are
+   trainable. The 17 non-stock weights must be **genuinely non-trainable**, not merely initialised
+   to zero: AdamW's `weight_decay=0.1` plus gradient noise on a zero-initialised trainable scalar
+   would let them drift and silently hand back the reach the arm exists to withhold.
+2. `codec/configs/model/learned_layer_mix_learn7.yaml`, alongside the existing variant and control
+   configs, differing only in that option.
+3. A third case in `run_learned_layer_mix_warmstart.sh`'s arm parser, with its own
+   `warmstart_learn7` output dir and `learn7-*` benchmark tags.
+
+Plus a test asserting the excluded weights are unchanged after an optimizer step, in the style of
+`tests/test_learned_layer_mix.py`.
+
+Then run it to a length comparable with the other arms (~200k), same warm start from
+`checkpoint-304000`, same per-chunk seed schedule, same pinned consistency loss.
+
+### 3. Experiment 3, cold start (see `experiments/2026-09-08-cold-start-layer-mix/NOTES.md`)
+
+Queued behind 2. Its comparison arm already exists, since the locked baseline is itself a
+cold-start run under the same protocol.
 
 ## Conventions worth preserving
 

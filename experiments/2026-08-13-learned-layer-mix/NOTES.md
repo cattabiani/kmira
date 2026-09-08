@@ -51,7 +51,9 @@ cannot reach the annealed number no matter how long it runs.
 ## Result
 
 `learned_mix` reached **27.905 dB at step 200,000, +3.16 dB over the plateau it started from**,
-while `control` stayed at 24.5 to 24.7 throughout. SSIM, LPIPS, P-DINO and rFDD all improved in the
+while `control` stayed at 24.5 to 24.7 for every step it has been run. The control is at 56,000
+steps against this arm's 200,000, so it has not yet been observed through the variant's jump at
+104,000; matching the lengths is the current priority. SSIM, LPIPS, P-DINO and rFDD all improved in the
 same direction, which rules out the aggregation trading perceptual quality for pixel error. The
 flat control is what makes the gain attributable to the aggregation rather than to the restart.
 
