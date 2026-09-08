@@ -41,6 +41,11 @@ schedule and chunking to the existing arms, so the three are directly comparable
 `learn7` minus `control` is the value of freedom alone. `learned_mix` minus `learn7` is the value
 of reach.
 
+In every arm the only frozen component is the DINOv3 backbone (`mira/src/mira/codec/dino.py`,
+frozen by design in the RAE and in stock mira). The bottleneck and decoder train throughout, so
+each arm's system adapts to whatever latent its aggregation produces; the arms differ only in which
+layer weights are trainable.
+
 Implementation: a trainable-index option on `VideoCodecLearnedLayerMix` rather than a second
 variant file. The 17 excluded weights must be genuinely non-trainable, not merely initialised to
 zero, or weight decay and gradient noise will let them drift and quietly reintroduce reach.
