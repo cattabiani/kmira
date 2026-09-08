@@ -64,10 +64,13 @@ variant's forward pass, and the variant wastefully building three DINOv3-L backb
 Warm-start-ready; comparison number to use is the constant-LR plateau (24.747), not the annealed
 one (24.885), since the warm-start run doesn't anneal.
 
-## 2026-08-26 -- 2026-09-06 — Experiment 1 result: the idea works, and beats the paper
+## 2026-08-26 -- 2026-09-06 — Experiment 1 result: the idea works, with an open question
 
 Ran the warm-started comparison across several sessions. `learned_mix` climbed from the 24.75dB
-plateau to **27.905dB by step 200,000** — past the paper's own Base-decoder reference (27.6dB) —
+plateau to **27.905dB by step 200,000**, a within-setup gain of +3.16dB (this originally read
+"past the paper's own Base-decoder reference (27.6dB)", which was a bad comparison: this rig is
+image-only and reduced-scale, and its own faithful baseline sits at 24.75 where the paper's Base
+decoder reaches 27.6, so the two numbers come from different setups),
 while the paired control (identical run, aggregation weights frozen) never left the plateau's
 neighborhood, staying at 24.5-24.7dB throughout. Not a PSNR-only effect: SSIM, LPIPS, P-DINO and
 rFDD all improved together, which rules out the aggregation gaming pixel error at perceptual

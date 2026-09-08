@@ -72,11 +72,17 @@ Appendix Table 22 additionally ablates *which* DINO layers are aggregated — th
   `../AGENTS.md` about why those two numbers answer different questions.
 - **Experiment 1** (learned per-DINO-layer aggregation,
   `src/kmira/codec/variants/learned_layer_mix.py`): warm-started from the locked baseline, reached
-  **27.905 dB at 200,000 steps** — past the paper's Base-decoder reference (27.6), and not a
+  **27.905 dB at 200,000 steps, +3.16 dB over the 24.747 plateau it started from**, and not a
   PSNR-only effect: SSIM/LPIPS/P-DINO/rFDD all improved together, while the paired control
   (identical run, aggregation weights frozen) stayed flat at ~24.7 the whole time. Still climbing
   as of the last reading (+0.07/8k steps). Check `results/benchmark.jsonl` (tags `learned_mix-*` /
   `control-*`) for the current numbers, don't assume the outcome from this file.
+
+  **Compare within this rig, not against the paper.** The 27.6 Base-decoder row in the table above
+  is not a like-for-like target: this setup is image-only and reduced-scale, and its own faithful
+  baseline sits at 24.747 where the paper's Base decoder reaches 27.6. The defensible claim is the
+  delta against the locked baseline with its paired control, not crossing a number produced by a
+  different setup.
 
   **What changed**: the learned weights didn't reweight the paper's 7 blocks — they moved almost
   entirely (~92% of the normalized vector) onto **layer 0**, the shallowest DINOv3 block, away from

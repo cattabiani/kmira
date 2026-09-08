@@ -37,8 +37,10 @@ much smaller, single-GPU scale, using paired A/B comparisons against a locked ba
   `checkpoints/calibration/plateau_baseline/checkpoint-304000` (304k steps, PSNR 24.88). This is
   the fixed comparison point for every future variant.
 - **Experiment 1** (learned per-DINO-layer aggregation, replacing mira's fixed 7-layer mean) works:
-  warm-started from the locked baseline, reached 27.905 dB by step 200,000 — past the paper's own
-  Base-decoder reference (27.6) — while a paired frozen-weight control stayed flat. But the learned
+  warm-started from the locked baseline, reached 27.905 dB by step 200,000, +3.16 dB over the
+  24.747 plateau it started from, while a paired frozen-weight control stayed flat. Do not compare
+  that to the paper's 27.6 Base-decoder row: different setup, and this rig's own faithful baseline
+  sits at 24.75 where the paper's reaches 27.6. But the learned
   weights didn't reweight the paper's layers, they abandoned them for DINOv3's shallowest block;
   the paper's own reasoning for its layer choice is about preserving semantics *for the world
   model*, and its one relevant ablation favors depth there too — so this is a proven reconstruction
@@ -102,6 +104,12 @@ any of these costs real time or a real bug, so they live here rather than only i
   warm start (`finetune_from`) resets the optimizer and raises the LR back up, so it can never reach
   the annealed number no matter how long it runs. Compare a constant-LR warm-start against the
   pre-anneal plateau, not the post-anneal one.
+- **`auto_weight` (on in every arm) rescales each perceptual term every step by the ratio of its
+  gradient norm to the L1 anchor's, at the decoder's last layer** (VQ-GAN style, `codec/loss.py`).
+  It is a per-step normalization, not a schedule and not a learned parameter, so it holds the loss
+  mix roughly constant rather than letting it drift as a variant changes the latent. Worth knowing
+  before suspecting it of confounding an arm-to-arm comparison: the factors are logged as
+  `loss_*_auto_w` if you ever want to check rather than assume.
 - **Calling a plateau/elbow needs several trailing readings, not one flat stretch.** This project
   has hit real false plateaus more than once — a multi-hour flat stretch followed by a further jump
   of over 1 dB. Stopping on the first flat reading has already cost real signal here.

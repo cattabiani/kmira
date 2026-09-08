@@ -10,6 +10,45 @@ it is the ground-truth baseline and is never modified here. When an idea require
 specific piece of the codec (e.g. the bottleneck), we fork just that file into `src/kmira/codec/`
 rather than vendoring the whole codec, so diffs against mira stay small and explicit.
 
+## Where this is
+
+The codec benchmark is built, calibrated and running. The world model is untouched.
+
+**Locked baseline.** mira's stock codec, Base decoder, image-only, trained to `checkpoint-304000`:
+PSNR 24.885 after annealing, 24.747 at the constant-LR plateau. Every experiment here compares
+against that, not against the paper's published numbers. This setup is image-only and
+reduced-scale, so absolute values are not comparable with mira's own (the reference table in
+[codec/README.md](codec/README.md) says so explicitly, and the plateau is the number a warm-started
+run should be read against).
+
+**Experiment 1, learned per-layer DINO aggregation.** mira aggregates a fixed set of 7 DINOv3
+layers with uniform weights, RAEv2's k=7 default, adopted unchanged. Replacing that with 24 learned
+per-layer weights, initialised to reproduce the stock formula exactly, gained **+3.16 dB PSNR over
+the 24.747 plateau** by step 200k, with SSIM, LPIPS, P-DINO and rFDD improving alongside it, while
+a paired control with the weights frozen stayed at 24.5-24.7 throughout. The flat control is what
+makes the gain attributable to the aggregation rather than to the warm restart.
+
+**What that does not show.** This benchmark scores reconstruction only. The learned weights put
+~92% of their normalized mass on DINOv3's shallowest block, away from the deeper blocks mira's
+formula keeps in order to preserve semantics for the world model that predicts in this latent.
+Whether the gain survives downstream is untested here, and there are reasons to expect it might
+not. Treat it as a reconstruction result with an open question attached, not as an improvement to
+MIRA.
+
+## Where to look
+
+- [codec/README.md](codec/README.md): current state of the codec work, how to run training and
+  evaluation, the paper's reference numbers and the calibration targets.
+- [CHANGELOG.md](CHANGELOG.md): the narrative, what happened in what order and why.
+- [AGENTS.md](AGENTS.md): orientation for a coding agent picking this up cold, plus the gotchas
+  about mira and this environment that cost real time to find once already.
+- [src/kmira/codec/variants/learned_layer_mix.py](src/kmira/codec/variants/learned_layer_mix.py):
+  Experiment 1's full rationale, including why the latent-consistency loss had to be pinned, in the
+  module docstring.
+- `codec/results/benchmark.jsonl`: every scored checkpoint (tags `learned_mix-*`, `control-*`,
+  `plateau-*`, `anneal-*`). The current numbers live here, not in prose.
+- `git log`: the reasoning trail. Commit messages carry the detail deliberately.
+
 ## Layout
 
 - `codec/` — everything for the codec benchmark: Hydra configs, training/launch scripts, output
