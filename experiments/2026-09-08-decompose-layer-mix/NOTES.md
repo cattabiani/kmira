@@ -76,9 +76,16 @@ the gradient is exactly zero. Masked weights would creep off their init and back
 handing this arm precisely the reach it exists to withhold, and invisibly — the run would still
 train and still produce a number.
 
-That failure is not hypothetical; the test written to catch it caught it, in a first draft that
-relied on the excluded entries starting at zero. Note the guarantee's exact shape: the *effective*
-weight is a constant, while the raw parameter entries still drift in storage under decay. They are
+That failure mode is not hypothetical, and it was observed rather than reasoned about. The
+substitution was in place from the start, so this is not a bug that shipped; what happened is that
+the first draft of the test asserted the *stored* parameter entries were unchanged after an
+optimizer step. That held for this arm's real configuration (excluded entries init at 0.0) and
+failed for a stress case freezing layer 23 instead, whose init of 8/7 read 1.1372 after five steps
+at `weight_decay=0.1` with zero gradient throughout. That is decoupled decay caught in the act, and
+it is the direct evidence that a gradient mask would have leaked.
+
+Note the guarantee's exact shape, which is narrower than "frozen": the *effective* weight is a
+constant, while the raw parameter entries still drift in storage under decay. They are
 inert, and for this arm's real configuration they do not drift at all (init exactly 0.0, and
 `p -= lr*wd*p` leaves 0.0 at 0.0). `tests/test_learned_layer_mix.py` pins both the bit-exact
 invariant for this configuration and the general substitution guarantee where decay does bite.
