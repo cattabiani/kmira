@@ -73,10 +73,11 @@ This matters more than tidiness, because reach is exactly what is in tension wit
 rationale. If freedom alone recovers most of the gain, there is a version of this result that is
 compatible with the paper's layer choice instead of opposed to it.
 
-Scaffolding is in place: `VideoCodecLearn7LayerMix` in
-`src/kmira/codec/variants/learned_layer_mix.py`, `codec/configs/model/learned_layer_mix_learn7.yaml`,
-a `learn7` arm in the launcher, and `tests/test_learned_layer_mix.py::test_learn7_freezes_non_stock_layers`
-asserting the excluded weights survive an optimizer step unchanged. What is left is the compute:
+Scaffolding is in place. `learn7` is not a new class or a freezing mechanism — it is
+`VideoCodecLearnedLayerMix` with `expose_layers: [11,13,15,17,19,21,23]`, so it simply never reads
+the shallow blocks and its weight vector is 7 long rather than 24. Config at
+`codec/configs/model/learned_layer_mix_learn7.yaml`, a `learn7` arm in the launcher, tests pinning
+the exposure/zero-weight equivalence. What is left is the compute:
 
 ```bash
 bash codec/scripts/run_learned_layer_mix_warmstart.sh 1 learn7    # 8k steps, ~1h + ~6min scoring
@@ -110,6 +111,11 @@ cold-start run under the same protocol.
   `src/kmira/codec/variants/`, initialized to reproduce the stock behavior exactly where possible
   (see `learned_layer_mix.py`'s byte-identical-at-init check), so any measured difference is
   attributable to the idea and not to an incidental change riding along with it.
+- **Prefer not doing a thing over doing it and disabling it.** `learn7` withholds the shallow
+  layers by not reading them, rather than reading all 24 and freezing 17 weights at zero. The two
+  are bit-identical, but the second needs a mask, frozen buffers, and a correct argument about what
+  AdamW's decoupled weight decay does to a held weight — an argument this repo got wrong once
+  before it got it right. Machinery that is hard to reason about is evidence against itself.
 - `checkpoints/` and `data/` are gitignored and local-only, shared across every part of this
   project (not nested under `codec/`). Don't expect them to be present after a fresh clone —
   see `README.md`'s Setup section (gated downloads) and `codec/README.md` (training).

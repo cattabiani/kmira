@@ -8,12 +8,12 @@
 #   bash codec/scripts/run_learned_layer_mix_warmstart.sh 4 learn7               # Experiment 2's arm
 #
 # THREE ARMS ARE DEFINED, all warm-started from the same locked baseline with the same seed
-# schedule and the same pinned 7-layer consistency loss, differing only in which of the 24
-# aggregation weights can move:
+# schedule and the same 7-layer consistency loss, differing only in which DINOv3 blocks the
+# aggregation reads and whether its weights can move:
 #
-#   control      none can move (frozen at the stock-equivalent init) -- absorbs the warm restart
-#   learn7       only the stock 7 can move -- Experiment 2: freedom without reach
-#   learned_mix  all 24 can move -- Experiment 1: freedom with reach
+#   control      reads all 24, none of the weights can move -- absorbs the warm restart
+#   learn7       reads only the stock 7, their weights learn -- Experiment 2: freedom w/o reach
+#   learned_mix  reads all 24, all weights learn -- Experiment 1: freedom with reach
 #
 # So learn7 - control is the value of freedom, and learned_mix - learn7 the value of reach. Both
 # of the Experiment 1 arms are complete at 200,000 steps (+2.914 dB); learn7 is the one still to
@@ -229,9 +229,9 @@ run_arm () {
 
 START=$(date +%s)
 
-# All three arms declare encoder.layer_weights as the expected-new key: control has that parameter
-# too (frozen) and learn7 keeps its mask/frozen-value tensors as NON-PERSISTENT buffers, so every
-# arm's checkpoint surface is identical and all three load the same stock baseline the same way.
+# All three arms declare encoder.layer_weights as the expected-new key: every arm has that
+# parameter (control's is frozen, learn7's is 7 long rather than 24), and it is absent from the
+# stock baseline checkpoint in all three cases, so they load it the same way.
 for arm in ${ARMS//,/ }; do
   case "$arm" in
     control)     run_arm control     learned_layer_mix_control "encoder.layer_weights" control ;;

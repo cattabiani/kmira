@@ -53,59 +53,55 @@ frozen by design in the RAE and in stock mira). The bottleneck and decoder train
 each arm's system adapts to whatever latent its aggregation produces; the arms differ only in which
 layer weights are trainable.
 
-## Implementation (built 2026-09-09)
+## Implementation (built 2026-09-09, simplified 2026-09-10)
 
-A `trainable_layers` option on `VideoCodecLearn7LayerMix`, a subclass of
-`VideoCodecLearnedLayerMix`, rather than a second variant file:
+`learn7` is not a freezing mechanism. It is the same class as `learned_mix` reading a different set
+of DINOv3 blocks:
 
-- `src/kmira/codec/variants/learned_layer_mix.py` — `VideoCodecLearn7LayerMix`, plus
-  `LearnedLayerMixEncoder.effective_layer_weights()`, which is an identity for the other two arms.
+```yaml
+_target_: kmira.codec.variants.learned_layer_mix.VideoCodecLearnedLayerMix
+expose_layers: [11, 13, 15, 17, 19, 21, 23]
+```
+
+Its weight vector is 7 long, all 7 trainable, initialised to `[1/7]*6 + [8/7]`. The shallow layers
+are not withheld from the optimizer — they are simply never read, so there is nothing to withhold.
+
+- `src/kmira/codec/variants/learned_layer_mix.py` — `expose_layers` on
+  `VideoCodecLearnedLayerMix`, defaulting to all 24.
 - `codec/configs/model/learned_layer_mix_learn7.yaml` — differs from `learned_layer_mix.yaml` in
-  exactly one line, the `_target_` (asserted by
-  `tests/test_config_loads.py::test_layer_mix_arms_differ_only_in_architecture_target`).
-- `codec/scripts/run_learned_layer_mix_warmstart.sh` — a third `learn7` arm, with its own
-  `warmstart_learn7` output dir and `learn7-*` benchmark tags.
-- `codec/scripts/report_layer_mix.py` — now reports all three arms and prints the
-  freedom/reach decomposition directly once `learn7` has scored checkpoints.
+  exactly that one key (asserted by
+  `tests/test_config_loads.py::test_layer_mix_arms_differ_only_in_target_and_exposure`).
+- `codec/scripts/run_learned_layer_mix_warmstart.sh` — a third `learn7` arm, its own
+  `warmstart_learn7` output dir and `learn7-*` tags.
+- `codec/scripts/report_layer_mix.py` — infers the exposure from the weight vector's length and
+  prints the freedom/reach decomposition once `learn7` has scored checkpoints.
 
-**How the exclusion is enforced.** The hazard is the one the pre-registration named: initialising
-the 17 weights to zero and leaving them trainable is *not* enough. The aggregation is
-`sum(w_i * f_i)`, so the gradient with respect to `w_i` is `f_i`, the layer's own features — which
-is nonzero regardless of `w_i` being 0. Left trainable they receive real gradients every step and
-walk away from zero, putting the shallow layers back into the latent and handing this arm the reach
-it exists to withhold, invisibly, because the run would still train and still produce a number.
-Measured, not assumed: ~0.3 after 200 steps
-(`tests/test_learned_layer_mix.py::test_zero_init_alone_does_not_freeze_a_layer_weight`).
+**Why selection rather than masking.** The first build did this the other way: expose all 24 and
+hold 17 weights at zero via a mask, substituted out of the forward pass. That works, but the two
+are *exactly* equivalent — a masked term contributes `0.0 * f`, and adding an exact zero to a float
+is exact in IEEE-754, so both spellings give a bit-identical latent (asserted in
+`tests/test_learned_layer_mix.py::test_restricting_by_exposure_equals_restricting_by_zero_weights`,
+and confirmed on the real model: `torch.equal` on the latent, max abs diff 0.0).
 
-The mechanism is substitution: `effective_layer_weights()` reads a constant for the excluded
-layers, so those parameter entries are absent from the graph and their gradient is structurally
-zero.
+Given equivalence, selection wins on everything that matters here. It needs no mask, no frozen
+buffers, and no reasoning at all about gradients or AdamW's decoupled weight decay reaching a
+weight that is meant to be held — a chain of reasoning subtle enough that the first write-up of it
+in this repo was wrong. It is also cheaper: 17 fewer tensor multiply-adds and ~113MB fewer retained
+features per forward. And it makes the arm legible, since "this arm reads 7 blocks" is the
+experiment, stated in one config key.
 
-**A gradient mask would also have been correct here**, and the record should say so rather than
-oversell the choice. With the gradient zeroed, AdamW leaves an entry at exactly 0.0 — its Adam step
-is zero, and its decoupled decay term `p -= lr*wd*p` also vanishes at `p == 0`. Both approaches are
-exact for this arm; there is a test pinning that
-(`test_a_gradient_mask_would_also_have_held_at_a_zero_init`). Substitution is preferred for two
-narrower reasons:
+What it gives up is the ability to pin a weight at a *nonzero* value — e.g. holding mira's deep
+residual at 8/7 while everything else learns. No arm wants that; if one ever does, the mask comes
+back in ~15 lines and it is in this repo's history.
 
-1. It holds for *any* frozen value, not only 0.0. A mask would let decoupled decay shrink a nonzero
-   frozen weight away — layer 23's 8/7 init reads 1.1372 after five steps at `weight_decay=0.1`
-   with zero gradient throughout. `learn7` never has a nonzero frozen value, so this is about
-   reusability for a future arm, not about this one.
-2. It is structural rather than procedural: the entry is not in the computation, so nothing has to
-   fire each step inside mira's `train_codec.py`, which this project runs unmodified and does not
-   own.
-
-An earlier revision of this file claimed a gradient mask "would have leaked" here. That was wrong —
-it generalised from the nonzero stress case above to an arm that has no nonzero frozen values.
-
-The consequence of substitution is that the guarantee is about the *effective* weight rather than
-the stored one: in general the excluded entries may drift in storage under decay and are simply
-never read. For `learn7` both are exact, since 0.0 decays to 0.0.
-
-The mask and frozen values are non-persistent buffers, so `state_dict` still holds exactly
-`encoder.layer_weights` and this arm warm-starts from `checkpoint-304000` through the same
-`KMIRA_FINETUNE_NEW_KEYS=encoder.layer_weights` path as the other two.
+**One trap worth knowing about.** `expose_layers` is a constructor argument, *not*
+`config.encoder.aggregation_layers`, and that is load-bearing. Both finished arms' saved
+`codec_config.yaml` files record `aggregation_layers: [11, 13, ..., 23]` while their checkpoints
+hold **24** weights, because the old class overrode that field internally. Deriving the exposure
+from the config would build a 7-weight encoder for those configs and fail the strict
+`load_state_dict` — breaking re-scoring of all 50 existing checkpoints, and only at scoring time.
+Defaulting the argument to all 24 keeps them loading; verified by loading both arms' step-200,000
+checkpoints after the change.
 
 ## Still to do
 

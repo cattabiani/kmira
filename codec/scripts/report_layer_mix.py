@@ -155,23 +155,38 @@ def report_weights(checkpoint_dir: pathlib.Path) -> None:
         return
 
     learned = state[key].float()
-    init = stock_equivalent_weights()
+
+    # Which DINOv3 blocks this arm READS is not in the state_dict -- it is a constructor argument --
+    # but the weight vector's length determines it, since every arm exposes either all 24 or exactly
+    # the stock 7. Weights are indexed by POSITION in that exposed set, so `blocks[pos]` is the
+    # actual DINOv3 block number and the two only coincide for the all-24 arms.
+    if len(learned) == DINO_L_DEPTH:
+        blocks = list(range(DINO_L_DEPTH))
+    elif len(learned) == len(STOCK_LAYERS):
+        blocks = list(STOCK_LAYERS)
+    else:
+        print(
+            f"\n{latest.parent.name}: {len(learned)} weights, expected {DINO_L_DEPTH} or {len(STOCK_LAYERS)}"
+        )
+        return
+
+    init = stock_equivalent_weights(blocks)
     moved = learned - init
 
     print()
     print("=" * 58)
     print(f" learned aggregation weights @ {latest.parent.name}")
     print("=" * 58)
-    print(f"{'layer':>6}{'init':>10}{'learned':>10}{'moved':>10}   {'':<12}")
-    for layer in range(DINO_L_DEPTH):
-        mark = "stock" if layer in STOCK_LAYERS else ""
-        print(f"{layer:>6}{init[layer]:>10.4f}{learned[layer]:>10.4f}{moved[layer]:>+10.4f}   {mark:<12}")
+    print(f" reads {len(blocks)} of {DINO_L_DEPTH} DINOv3 blocks: {blocks}")
+    print()
+    print(f"{'block':>6}{'init':>10}{'learned':>10}{'moved':>10}   {'':<12}")
+    for pos, block in enumerate(blocks):
+        mark = "stock" if block in STOCK_LAYERS else ""
+        print(f"{block:>6}{init[pos]:>10.4f}{learned[pos]:>10.4f}{moved[pos]:>+10.4f}   {mark:<12}")
 
-    off_stock = torch.tensor([moved[i] for i in range(DINO_L_DEPTH) if i not in STOCK_LAYERS])
     print()
     print(f"max |move|                 : {moved.abs().max():.4f}")
     print(f"L2 |move|                  : {moved.norm():.4f}   (init L2 = {init.norm():.4f})")
-    print(f"max |move| off stock layers: {off_stock.abs().max():.4f}")
 
     # SHARES, not absolute sums. The aggregation's overall scale is not identified: scaling
     # layer_weights down and the bottleneck projection up leaves the latent unchanged, and weight
@@ -180,17 +195,28 @@ def report_weights(checkpoint_dir: pathlib.Path) -> None:
     # reading one as a fraction is how "92% on the non-stock layers" first got written up as "92%
     # on layer 0" -- see experiments/2026-08-13-learned-layer-mix/NOTES.md.
     share = learned.abs() / learned.abs().sum()
-    non_stock = sum(float(share[i]) for i in range(DINO_L_DEPTH) if i not in STOCK_LAYERS)
-    top = sorted(range(DINO_L_DEPTH), key=lambda i: -float(share[i]))[:5]
+    off_stock_positions = [pos for pos, b in enumerate(blocks) if b not in STOCK_LAYERS]
+    top = sorted(range(len(blocks)), key=lambda pos: -float(share[pos]))[:5]
     print()
-    print(f"normalized |weight| share, stock 7 layers  : {100 * (1 - non_stock):5.1f}%")
-    print(f"normalized |weight| share, other 17 layers : {100 * non_stock:5.1f}%")
-    print("largest single layers: " + ", ".join(f"L{i} {100 * float(share[i]):.1f}%" for i in top))
+    if off_stock_positions:
+        non_stock = sum(float(share[pos]) for pos in off_stock_positions)
+        print(
+            f"max |move| off stock blocks: {max(float(moved[pos].abs()) for pos in off_stock_positions):.4f}"
+        )
+        print(f"normalized |weight| share, stock 7 blocks  : {100 * (1 - non_stock):5.1f}%")
+        print(f"normalized |weight| share, other 17 blocks : {100 * non_stock:5.1f}%")
+    else:
+        print("this arm reads only the stock blocks, so there is no off-stock share to report --")
+        print("it withholds reach BY CONSTRUCTION, which is the whole point of the learn7 arm.")
+    print(
+        "largest single blocks: " + ", ".join(f"L{blocks[pos]} {100 * float(share[pos]):.1f}%" for pos in top)
+    )
     print()
     print("Interpretation: near-zero MOVEMENT means the gradient does not want a different layer")
-    print("combination, and the hand-picked formula was already near a local optimum. Share moving")
-    print("onto the other 17 layers is the positive signal -- it means training found information")
-    print("in layers the stock recipe discards. Compare shares between arms, never raw magnitudes.")
+    print("combination, and the hand-picked formula was already near a local optimum. For an arm")
+    print("that reads all 24, share moving onto the other blocks is the positive signal -- training")
+    print("found information the stock recipe discards. Compare shares between arms, never raw")
+    print("magnitudes.")
 
 
 def main() -> None:

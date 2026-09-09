@@ -158,6 +158,42 @@ exists to withhold. A test asserts they are bit-identical after a real optimizer
 Pre-registered outcomes were written before the scaffolding, in
 `experiments/2026-09-08-decompose-layer-mix/NOTES.md`.
 
+## 2026-09-10 — learn7 becomes a layer selection, not a freezing mechanism
+
+Simplification, before `learn7` has run a single step — which is the only free moment to change an
+arm's parameterization.
+
+The arm was built as "expose all 24 DINOv3 blocks, freeze 17 weights at zero", with a mask, frozen
+buffers, and a substitution in the forward pass. It is now "read only the stock 7 blocks", which is
+the same class as `learned_mix` with one config key: `expose_layers: [11,13,15,17,19,21,23]`. Its
+weight vector is 7 long, all trainable.
+
+The two are *exactly* equivalent, not approximately: a frozen term contributes `0.0 * f`, and
+adding an exact zero to a float is exact in IEEE-754, so both spellings give a bit-identical
+latent. Verified on the real model, not just in a unit test — `torch.equal` on the latent, max abs
+diff 0.0, and identical consistency-loss targets.
+
+Given equivalence, selection wins on the things that matter. It deletes the mask, the buffers, the
+substitution, and three tests. More to the point it deletes an entire category of reasoning — does
+the gradient reach these, does decoupled weight decay move them, is a mask enough — that this repo
+got *wrong in writing* before it got right, twice over in one session. Machinery hard enough to
+reason about that its own justification keeps coming out wrong is evidence against itself. It is
+also cheaper: 17 fewer tensor multiply-adds and ~113MB fewer retained features per forward.
+
+What is given up is pinning a weight at a *nonzero* value — holding mira's deep residual at 8/7
+while the rest learns, say. No arm wants that, and if one ever does the mask returns in ~15 lines
+from this history.
+
+**The trap this nearly walked into**, worth knowing before touching the variant again: the exposure
+is a constructor argument, NOT `config.encoder.aggregation_layers`. Both finished arms' saved
+`codec_config.yaml` files record `aggregation_layers: [11,13,...,23]` while their checkpoints hold
+24 weights, because the old class overrode that field internally. Deriving the exposure from the
+config would have built a 7-weight encoder for those saved configs and failed the strict
+`load_state_dict` against 24 saved weights — silently breaking re-scoring of all 50 checkpoints the
+two finished arms produced, and only at scoring time, which is exactly the failure mode `AGENTS.md`
+warns about. The argument defaults to all 24; both arms' step-200,000 checkpoints were re-loaded
+after the change to confirm.
+
 ## 2026-08-26 — Publishing pass
 
 Removed every hardcoded `/home/katta`-style path in favor of `direnv` (`.envrc`) plus two env vars

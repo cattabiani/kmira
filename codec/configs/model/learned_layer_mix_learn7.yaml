@@ -1,6 +1,4 @@
-# EXPERIMENT 2's `learn7` arm: the per-layer aggregation weights are learnable, but only over the
-# stock 7 layers -- the 17 layers Experiment 1's variant reached into are held at zero and cannot
-# move.
+# EXPERIMENT 2's `learn7` arm: learned aggregation weights over mira's OWN 7 layers only.
 #
 # Experiment 1 changed two things at once: FREEDOM (the weights became learnable) and REACH (17
 # extra, mostly shallower, DINOv3 layers became available). It gained +2.914 dB over its paired
@@ -10,18 +8,22 @@
 #   learn7      - control  = the value of freedom
 #   learned_mix - learn7   = the value of reach
 #
-# Identical to model/learned_layer_mix.yaml except `architecture._target_` (and the `trainable_layers`
-# it implies). Same warm start from checkpoint-304000, same seed schedule, same pinned 7-layer
-# consistency loss -- so all three arms stay directly comparable.
+# Identical to model/learned_layer_mix.yaml except for `architecture.expose_layers`, which is the
+# whole of the arm: the aggregation reads only the stock 7 blocks, so the shallow layers simply are
+# not available to it. Same class, same warm start from checkpoint-304000, same seed schedule, same
+# 7-layer consistency loss -- so all three arms stay directly comparable.
 #
-# The 17 excluded weights are genuinely frozen, not just initialised to zero -- which matters
-# because a zero weight still receives a real gradient here (d(sum w_i f_i)/dw_i = f_i, independent
-# of w_i), so left trainable they would drift back into the latent and hand this arm the reach it
-# exists to withhold. They are substituted out of the forward pass instead, so their gradient is
-# structurally zero. See VideoCodecLearn7LayerMix in
-# ../../../src/kmira/codec/variants/learned_layer_mix.py and the optimizer-step tests in
-# ../../../tests/test_learned_layer_mix.py, which also record that a gradient mask would have been
-# correct for this arm too -- substitution is chosen for generality, not because a mask would leak.
+# Restricting by NOT EXPOSING the other 17 rather than by exposing all 24 and freezing 17 weights at
+# zero: the two are bit-identical (a frozen term contributes 0.0 * f, and adding an exact zero is
+# exact in IEEE-754), and selection needs no freezing mechanism, so there is nothing to reason about
+# regarding gradients or AdamW's decoupled weight decay. It is also cheaper -- 17 fewer tensor
+# multiply-adds and ~113MB fewer retained features per forward.
+#
+# NOTE `expose_layers` sits on `architecture`, NOT on `architecture.config.encoder`. The inner
+# `aggregation_layers` below is overridden at construction and is documentation only; the outer one
+# is what the encoder reads. See VideoCodecLearnedLayerMix in
+# ../../../src/kmira/codec/variants/learned_layer_mix.py for why the two are separate (old
+# checkpoints' saved configs record the stock 7 while holding 24 weights).
 
 loss:
   _target_: mira.codec.CodecLoss
@@ -38,8 +40,11 @@ loss:
     auto_weight: true
 
 architecture:
-  _target_: kmira.codec.variants.learned_layer_mix.VideoCodecLearn7LayerMix
+  _target_: kmira.codec.variants.learned_layer_mix.VideoCodecLearnedLayerMix
   _convert_: all
+
+  # THE ARM. Everything else in this file matches model/learned_layer_mix.yaml exactly.
+  expose_layers: [11, 13, 15, 17, 19, 21, 23]
 
   config:
     _target_: mira.codec.VideoCodecConfig

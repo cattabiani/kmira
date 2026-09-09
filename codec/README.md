@@ -29,7 +29,9 @@ entire divergence from mira is configuration and small standalone patch modules 
   - `calib_frozen_bottleneck.yaml` — the calibration downgrade (a frozen random bottleneck,
     reproducing the paper's Table 4 "-1.4 dB" row).
   - `learned_layer_mix.yaml` / `learned_layer_mix_control.yaml` — Experiment 1 (below).
-  - `learned_layer_mix_learn7.yaml` — Experiment 2's `learn7` arm: freedom without reach.
+  - `learned_layer_mix_learn7.yaml` — Experiment 2's `learn7` arm: the same class as
+    `learned_layer_mix.yaml` reading only mira's stock 7 blocks (`expose_layers`), i.e. freedom
+    without reach.
 - `configs/baseline.yaml` — standalone config for the visualization script (not a training entry).
 - `scripts/run_calibration.sh` — the three-arm calibration run.
 - `scripts/run_plateau.sh` / `run_anneal.sh` — constant-LR plateau search, then cosine anneal.

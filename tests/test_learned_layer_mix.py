@@ -11,17 +11,16 @@ from __future__ import annotations
 
 import pytest
 import torch
-from torch import nn
 
 from kmira.codec.variants.learned_layer_mix import (
     DINO_L_DEPTH,
     STOCK_LAYERS,
-    LearnedLayerMixEncoder,
     stock_equivalent_weights,
 )
 
 
 def test_stock_equivalent_weights_sum_matches_formula() -> None:
+    """The all-24 exposure: weights indexed by DINOv3 block number, 17 of them zero."""
     w = stock_equivalent_weights()
     assert w.shape == (DINO_L_DEPTH,)
     # 6 layers at 1/7 plus 1 layer at 1/7 + 1 == 2 total, exactly the stock formula's weight mass
@@ -108,155 +107,59 @@ def test_layer_index_means_the_same_thing_at_7_and_24_layers() -> None:
         )
 
 
-class _BareMixEncoder(LearnedLayerMixEncoder):
-    """Just the layer-weight machinery, with no DINOv3 backbone or bottleneck attached.
+def test_stock_equivalent_weights_for_a_stock_only_exposure() -> None:
+    """The `learn7` exposure: 7 weights, indexed by POSITION, no zeros at all.
 
-    ``VideoCodecLearn7LayerMix`` normally acquires these attributes by having ``VideoCodec`` build a
-    real encoder and then re-pointing its class, which needs a 300M-parameter backbone and gated
-    weights on disk. The freezing property under test involves none of that -- it is entirely about
-    ``effective_layer_weights`` and the optimizer -- so this stands the same machinery up directly.
+    ``learn7`` restricts the arm by reading only the stock blocks rather than by freezing 17 weights
+    at zero, so its weight vector is 7 long and its indices are positions in ``STOCK_LAYERS``, not
+    DINOv3 block numbers. Same total mass as the all-24 vector, because it is the same formula.
     """
+    w = stock_equivalent_weights(STOCK_LAYERS)
 
-    def __init__(self, trainable_layers: tuple[int, ...]) -> None:
-        nn.Module.__init__(self)
-        self.layer_weights = nn.Parameter(stock_equivalent_weights())
-        mask = torch.zeros(DINO_L_DEPTH, dtype=torch.bool)
-        for layer in trainable_layers:
-            mask[layer] = True
-        self.register_buffer("layer_weight_trainable_mask", mask, persistent=False)
-        self.register_buffer("frozen_layer_weights", stock_equivalent_weights(), persistent=False)
+    assert w.shape == (len(STOCK_LAYERS),)
+    assert torch.isclose(w.sum(), torch.tensor(2.0))
+    assert (w > 0).all(), "a stock-only exposure has no zero weights to freeze"
+    for pos in range(len(STOCK_LAYERS) - 1):
+        assert torch.isclose(w[pos], torch.tensor(1 / len(STOCK_LAYERS)))
+    # The deep residual lands on the LAST POSITION, which is where layer 23 sits in this exposure.
+    assert torch.isclose(w[-1], torch.tensor(1 / len(STOCK_LAYERS) + 1.0))
 
 
-def test_learn7_freezes_non_stock_layers() -> None:
-    """The 17 excluded weights must be UNCHANGED after a real optimizer step, not just zero at init.
+def test_restricting_by_exposure_equals_restricting_by_zero_weights() -> None:
+    """Selecting 7 layers and zero-weighting 17 of 24 must give the SAME aggregation, bit for bit.
 
-    This is the property the whole of Experiment 2 rests on. ``learn7`` exists to measure freedom
-    *without* reach, so if the excluded weights can drift at all the arm quietly regains the reach it
-    was built to withhold and measures nothing -- and it would do so invisibly, since the run would
-    still train and still produce a number.
-
-    Uses the real optimizer configuration, ``AdamW(weight_decay=0.1)``, and drives a real gradient
-    into the trainable entries so that "nothing moved" cannot pass vacuously. See
-    ``test_zero_init_alone_does_not_freeze_a_layer_weight`` for the failure this is guarding
-    against, which is a *gradient* leak rather than a weight-decay one.
+    This is the equivalence that lets ``learn7`` be an exposure rather than a freezing mechanism. It
+    is exact rather than approximate: the dropped terms are ``0.0 * f``, and adding an exact zero to
+    a float is exact in IEEE-754, so the two accumulation orders cannot diverge. Asserted with
+    ``torch.equal`` rather than ``allclose`` precisely to pin that.
     """
     torch.manual_seed(0)
-    encoder = _BareMixEncoder(STOCK_LAYERS)
-    opt = torch.optim.AdamW([encoder.layer_weights], lr=1e-2, weight_decay=0.1)
+    dino_dim = 8
+    features = [torch.randn(1, 1, dino_dim, 3, 3) for _ in range(DINO_L_DEPTH)]
 
-    before = encoder.layer_weights.detach().clone()
-    for _ in range(5):
-        opt.zero_grad()
-        # Any scalar objective that depends on the effective weights; the point is that a real
-        # gradient reaches the trainable entries, so "nothing moved" cannot pass vacuously.
-        (encoder.effective_layer_weights() * torch.randn(DINO_L_DEPTH)).sum().backward()
-        opt.step()
-    after = encoder.layer_weights.detach()
+    all24 = stock_equivalent_weights()
+    agg_masked = sum(w * f for w, f in zip(all24.unbind(), features, strict=True))
 
-    effective = encoder.effective_layer_weights().detach()
-    for layer in range(DINO_L_DEPTH):
-        if layer in STOCK_LAYERS:
-            continue
-        # Bit-exact in storage AND in what the aggregation uses. Storage stays exact here only
-        # because these entries init at 0.0 and decoupled decay leaves 0.0 at 0.0; the general
-        # guarantee is the effective one -- see the next test.
-        assert after[layer] == before[layer], f"excluded layer {layer} moved"
-        assert effective[layer] == before[layer], f"excluded layer {layer} reached the aggregation"
-        assert encoder.layer_weights.grad[layer] == 0.0, f"gradient reached excluded layer {layer}"
+    seven = stock_equivalent_weights(STOCK_LAYERS)
+    stock_features = [features[i] for i in STOCK_LAYERS]
+    agg_selected = sum(w * f for w, f in zip(seven.unbind(), stock_features, strict=True))
 
-    moved = [layer for layer in STOCK_LAYERS if after[layer] != before[layer]]
-    assert len(moved) == len(STOCK_LAYERS), f"only {moved} of the stock layers moved"
+    assert torch.equal(agg_masked, agg_selected)
 
 
-def test_zero_init_alone_does_not_freeze_a_layer_weight() -> None:
-    """The hazard the mechanism exists for: a zero-initialised weight left TRAINABLE drifts.
+def test_consistency_loss_targets_are_positions_not_block_numbers() -> None:
+    """`stock_feature_positions` must index the EXPOSED set, not DINOv3 block numbers.
 
-    Pre-registered in ``experiments/2026-09-08-decompose-layer-mix/NOTES.md`` as the thing that must
-    not happen, and worth a test because the intuition runs the other way -- a weight sitting at 0.0
-    looks inert. It is not. The aggregation is ``sum(w_i * f_i)``, so the gradient with respect to
-    ``w_i`` is ``f_i``, the layer's own features, which is nonzero *regardless of ``w_i`` being 0*.
-    Excluded weights left trainable therefore receive real gradients on every step and walk away
-    from zero, putting the shallow layers back into the latent and silently handing ``learn7`` the
-    reach it exists to withhold.
-
-    This is the measurement behind that claim, so the docstrings can assert it rather than reason
-    about it.
+    The consistency loss zips its predictions against ``dino_features`` with a NON-STRICT zip
+    (mira/codec/dino.py), so getting this wrong misaligns layers silently instead of raising --
+    training against the wrong targets while still producing a plausible number. Under the all-24
+    exposure position and block number coincide, which is exactly what would let a positional bug
+    hide until an arm exposes a different set.
     """
-    torch.manual_seed(0)
-    weights = nn.Parameter(stock_equivalent_weights())
-    opt = torch.optim.AdamW([weights], lr=1e-2, weight_decay=0.1)
-    excluded = [layer for layer in range(DINO_L_DEPTH) if layer not in STOCK_LAYERS]
+    for exposure in (tuple(range(DINO_L_DEPTH)), STOCK_LAYERS):
+        positions = tuple(exposure.index(i) for i in STOCK_LAYERS)
+        features = [f"block-{i}" for i in exposure]
+        assert [features[p] for p in positions] == [f"block-{i}" for i in STOCK_LAYERS]
 
-    for _ in range(200):
-        opt.zero_grad()
-        (weights * torch.randn(DINO_L_DEPTH)).sum().backward()
-        opt.step()
-
-    assert weights.detach()[excluded].abs().max() > 0.1, (
-        "a zero-initialised trainable layer weight was expected to drift; if this now holds still, "
-        "the reasoning in VideoCodecLearn7LayerMix's docstring needs revisiting"
-    )
-
-
-def test_a_gradient_mask_would_also_have_held_at_a_zero_init() -> None:
-    """Records what substitution is and is NOT bought with, so the choice is not oversold.
-
-    For ``learn7``'s actual configuration a gradient mask would have been correct too: with the
-    gradient zeroed, AdamW leaves an entry at exactly 0.0, because its Adam step is zero and its
-    decoupled decay term ``p -= lr * wd * p`` also vanishes at ``p == 0``. Substitution is preferred
-    for two narrower reasons -- it holds for any frozen value, not only 0.0, and it is structural
-    rather than depending on a hook firing inside mira's unmodified training loop -- and this test
-    exists so a future reader is not told the stronger, false story that a mask would have leaked
-    here.
-    """
-    torch.manual_seed(0)
-    weights = nn.Parameter(stock_equivalent_weights())
-    opt = torch.optim.AdamW([weights], lr=1e-2, weight_decay=0.1)
-    trainable = torch.zeros(DINO_L_DEPTH, dtype=torch.bool)
-    for layer in STOCK_LAYERS:
-        trainable[layer] = True
-
-    for _ in range(200):
-        opt.zero_grad()
-        (weights * torch.randn(DINO_L_DEPTH)).sum().backward()
-        weights.grad[~trainable] = 0.0
-        opt.step()
-
-    assert torch.equal(weights.detach()[~trainable], torch.zeros(int((~trainable).sum())))
-
-
-def test_substitution_also_holds_a_NONZERO_frozen_value() -> None:
-    """Where substitution is strictly stronger than a gradient mask: a frozen value that is not 0.
-
-    AdamW's decoupled decay moves a parameter from its own value even at zero gradient, so a masked
-    weight frozen at 8/7 WOULD shrink away. Substitution does not care: the aggregation reads the
-    constant in ``frozen_layer_weights``, so the effective value is exact no matter what the stored
-    entry does. ``learn7`` never exercises this -- all its excluded entries are 0.0 -- but the
-    option is what makes the mechanism reusable for a future arm that freezes a real weight.
-    """
-    torch.manual_seed(0)
-    frozen_layer = STOCK_LAYERS[-1]
-    trainable = tuple(layer for layer in range(DINO_L_DEPTH) if layer != frozen_layer)
-    encoder = _BareMixEncoder(trainable)
-    opt = torch.optim.AdamW([encoder.layer_weights], lr=1e-2, weight_decay=0.1)
-
-    before = float(stock_equivalent_weights()[frozen_layer])
-    assert before != 0.0, "this test is only meaningful on a non-zero frozen init"
-
-    for _ in range(5):
-        opt.zero_grad()
-        (encoder.effective_layer_weights() * torch.randn(DINO_L_DEPTH)).sum().backward()
-        opt.step()
-
-    # The value the aggregation uses is exactly the init, to the bit, after five decayed steps.
-    assert float(encoder.effective_layer_weights()[frozen_layer].detach()) == before
-    assert float(encoder.layer_weights.grad[frozen_layer]) == 0.0
-    # ...even though the raw storage HAS drifted, which is the whole difference from a mask.
-    assert float(encoder.layer_weights[frozen_layer].detach()) != before
-
-
-def test_effective_weights_are_identity_without_a_mask() -> None:
-    """No mask means no behaviour change: `learned_mix` and `control` must be untouched by this."""
-    encoder = _BareMixEncoder(tuple(range(DINO_L_DEPTH)))
-    del encoder.layer_weight_trainable_mask
-    assert torch.equal(encoder.effective_layer_weights(), encoder.layer_weights)
+    # And the two exposures genuinely disagree about the indices, so the test above has teeth.
+    assert tuple(range(DINO_L_DEPTH)).index(23) != STOCK_LAYERS.index(23)

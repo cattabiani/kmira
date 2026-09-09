@@ -46,6 +46,8 @@ plus its own unpinned ``CodecLoss`` gave a consistency-loss difference of exactl
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import torch
 from einops import rearrange
 from mira.codec import VideoCodec
@@ -60,72 +62,66 @@ STOCK_LAYERS = (11, 13, 15, 17, 19, 21, 23)
 DINO_L_DEPTH = 24
 
 
-def stock_equivalent_weights() -> Tensor:
-    """The per-layer scalars that reproduce ``mean(stock layers) + features[-1]`` exactly."""
-    w = torch.zeros(DINO_L_DEPTH)
-    for layer in STOCK_LAYERS:
-        w[layer] += 1 / len(STOCK_LAYERS)
-    w[STOCK_LAYERS[-1]] += 1.0  # the stock formula's separate "+ features[-1]" term
+def stock_equivalent_weights(layers: Sequence[int] = range(DINO_L_DEPTH)) -> Tensor:
+    """The scalars that reproduce ``mean(stock layers) + features[-1]`` exactly.
+
+    Indexed by POSITION IN ``layers`` -- the set of DINOv3 blocks the encoder actually reads -- not
+    by DINOv3 block number, because that is the order ``dino_forward`` returns features in. For the
+    default all-24 exposure the two coincide; for an arm exposing only :data:`STOCK_LAYERS` the
+    result is the 7-vector ``[1/7] * 6 + [8/7]``. Either way the weights sum to 2 (the mean
+    contributes 1, the deep residual another 1) and the aggregation is identical.
+    """
+    w = torch.zeros(len(layers))
+    for pos, layer in enumerate(layers):
+        if layer in STOCK_LAYERS:
+            w[pos] += 1 / len(STOCK_LAYERS)
+        if layer == STOCK_LAYERS[-1]:
+            w[pos] += 1.0  # the stock formula's separate "+ features[-1]" term
     return w
 
 
-def all_layers_config(config: VideoCodecConfig) -> VideoCodecConfig:
-    """``config`` with the encoder set to read every DINOv3 layer rather than the stock 7.
+def exposing_layers(config: VideoCodecConfig, layers: Sequence[int]) -> VideoCodecConfig:
+    """``config`` with the encoder set to read exactly ``layers``.
 
     Handing this to ``RAEEncoder`` means its ``DinoModel`` is built correctly the *first* time. The
     obvious alternative -- let it build the stock 7-layer backbone and then overwrite ``rae_dino``
-    with a 24-layer one -- constructs and discards a whole DINOv3-L (~300M params, ~1.2GB fp32) per
+    with a different one -- constructs and discards a whole DINOv3-L (~300M params, ~1.2GB fp32) per
     replacement, and stacking that pattern at both the encoder and codec level built *three*
     backbones to keep one. On a 30GB machine with 512MB of swap, that transient is not a rounding
     error; see codec/README.md.
     """
-    encoder = config.encoder.model_copy(update={"aggregation_layers": list(range(DINO_L_DEPTH))})
+    encoder = config.encoder.model_copy(update={"aggregation_layers": list(layers)})
     return config.model_copy(update={"encoder": encoder})
 
 
 class LearnedLayerMixEncoder(RAEEncoder):
     """`RAEEncoder` with a learned scalar weight per DINOv3 layer instead of the fixed formula.
 
+    One weight per layer the encoder READS, which is not necessarily all 24 -- see
+    :class:`VideoCodecLearnedLayerMix`'s ``expose_layers``. ``layer_weights`` and ``features`` are
+    both indexed by position in that exposed set.
+
     Deliberately defines no ``__init__``: it is never constructed directly. ``VideoCodec.__init__``
     hardcodes ``RAEEncoder``, so :class:`VideoCodecLearnedLayerMix` lets it build a stock encoder
-    from an all-layers config -- identical module tree, identical frozen backbone -- and then
-    re-points that instance's class here and attaches ``layer_weights``. Only ``forward`` differs,
-    so there is nothing an ``__init__`` would need to do that hasn't already been done.
+    from a config already naming the layers to expose -- identical module tree, identical frozen
+    backbone -- and then re-points that instance's class here and attaches ``layer_weights`` and
+    ``stock_feature_positions``. Only ``forward`` differs, so there is nothing an ``__init__`` would
+    need to do that hasn't already been done.
     """
-
-    def effective_layer_weights(self) -> Tensor:
-        """The weights the aggregation actually uses.
-
-        Identity on ``layer_weights`` unless a trainable subset was requested (see
-        :class:`VideoCodecLearn7LayerMix`), in which case the excluded entries are read from a
-        constant instead, so no gradient reaches them and no optimizer state can move what the
-        aggregation actually uses.
-
-        Substituting here rather than masking the gradient makes the exclusion structural: the entry
-        is absent from the graph, so nothing needs to run each step for it to hold. It also keeps
-        working for a *nonzero* frozen value, where a gradient mask would not -- AdamW's *decoupled*
-        ``weight_decay`` updates a parameter from its own value even at zero gradient, so a masked
-        nonzero weight would shrink away. (At exactly 0.0, this arm's case, a mask would have been
-        fine; see :class:`VideoCodecLearn7LayerMix`.) The excluded entries of ``layer_weights`` do
-        still drift under that decay; they are simply never read.
-        """
-        mask = getattr(self, "layer_weight_trainable_mask", None)
-        if mask is None:
-            return self.layer_weights
-        return torch.where(mask, self.layer_weights, self.frozen_layer_weights)
 
     def forward(self, video: Tensor) -> RAEEncoderOutputs:
         video = (video + 1) / 2  # VideoCodec normalizes to [-1, 1]; DinoModel expects [0, 1].
 
         with torch.no_grad():
-            features = self.rae_dino.dino_forward(video)  # 24 x (B, T, dino_dim, H, W)
+            features = self.rae_dino.dino_forward(video)  # len(exposed) x (B, T, dino_dim, H, W)
 
         # Accumulate rather than torch.stack + einsum: stacking allocates a full second copy of
-        # every layer (24 x ~4.7MB per layer at batch 4, so ~113MB) purely to reduce it away again.
+        # every layer (~4.7MB per layer at batch 4, so ~113MB across all 24) purely to reduce it
+        # away again.
         # Summing in place needs only the running total and one temporary. The features themselves
         # must stay alive regardless -- dino_forward returns them all at once, and they are handed
         # back as `dino_features` for the consistency loss to use as targets.
-        agg = sum(w * f for w, f in zip(self.effective_layer_weights().unbind(), features, strict=True))
+        agg = sum(w * f for w, f in zip(self.layer_weights.unbind(), features, strict=True))
 
         if isinstance(self.rae_projection, nn.Conv3d):
             x = rearrange(agg, "b t c h w -> b c t h w")
@@ -151,29 +147,82 @@ class LearnedLayerMixEncoder(RAEEncoder):
 
         # Only the stock 7 go back as `dino_features`. That tuple is used for exactly one thing --
         # the latent-consistency loss's targets (mira/codec/loss.py: `real_lc`) -- so returning the
-        # stock subset holds that loss at the baseline's 7-layer objective while the aggregation
-        # above still reads all 24. Must stay in lockstep with pin_consistency_loss_layers().
-        return RAEEncoderOutputs(z=z, dino_features=tuple(features[i] for i in STOCK_LAYERS))
+        # stock subset holds that loss at the baseline's 7-layer objective whatever the aggregation
+        # above reads. Indexed by POSITION in the exposed set, not by DINOv3 block number: for an
+        # arm exposing only the stock 7 this is every feature, for the all-24 exposure it is a
+        # subset. Must stay in lockstep with pin_consistency_loss_layers().
+        return RAEEncoderOutputs(z=z, dino_features=tuple(features[p] for p in self.stock_feature_positions))
 
 
 class VideoCodecLearnedLayerMix(VideoCodec):
-    """`VideoCodec` using `LearnedLayerMixEncoder` instead of the stock fixed-formula aggregation."""
+    """`VideoCodec` using `LearnedLayerMixEncoder` instead of the stock fixed-formula aggregation.
 
-    def __init__(self, config: VideoCodecConfig, require_dino_weights: bool = True) -> None:
+    ``expose_layers`` names the DINOv3 blocks the aggregation reads, and is what distinguishes the
+    experiment's arms:
+
+    ==================  ==============================  ============================================
+    arm                 ``expose_layers``               meaning
+    ==================  ==============================  ============================================
+    ``learned_mix``     all 24 (the default)            freedom *and* reach -- Experiment 1
+    ``learn7``          :data:`STOCK_LAYERS`            freedom without reach -- Experiment 2
+    ``control``         all 24, weights frozen          neither (:class:`VideoCodecFixedLayerMix`)
+    ==================  ==============================  ============================================
+
+    Restricting the arm to the stock 7 by *not exposing* the other blocks, rather than by exposing
+    all 24 and freezing 17 weights at zero, is deliberate and the two are exactly equivalent: a
+    masked term contributes ``0.0 * f``, and adding an exact zero to a float is exact in IEEE-754,
+    so both spellings produce a bit-identical latent. Selection is preferred because it needs no
+    freezing mechanism at all -- no mask, no per-element gradient reasoning, no question about what
+    AdamW's decoupled weight decay does to a weight that is supposed to be held -- and because it
+    skips 17 pointless tensor multiply-adds and retains 17 fewer feature tensors (~113MB at batch 4)
+    per forward. The cost is that it can only pin a weight at *zero*; an arm wanting to freeze a
+    weight at a nonzero value (say, holding mira's deep residual at 8/7 while the rest learns) would
+    need a mask reintroduced. No arm does.
+
+    **``expose_layers`` is a constructor argument, not ``config.encoder.aggregation_layers``**, and
+    that is load-bearing rather than stylistic. Earlier checkpoints were written by a version that
+    always read all 24 while recording ``aggregation_layers: [11, 13, ..., 23]`` in their
+    ``codec_config.yaml``, since the class overrode that field internally. Deriving the exposure
+    from the config would build a 7-weight encoder for those saved configs and then fail the strict
+    ``load_state_dict`` against their 24-weight ``encoder.layer_weights`` -- breaking re-scoring of
+    every checkpoint both finished arms produced, and only at scoring time. Defaulting this argument
+    to all 24 keeps those configs loading exactly as they did.
+    """
+
+    def __init__(
+        self,
+        config: VideoCodecConfig,
+        require_dino_weights: bool = True,
+        expose_layers: Sequence[int] | None = None,
+    ) -> None:
         assert config.encoder.rae_model == "dinov3_vitl16", (
             f"LearnedLayerMix assumes DINOv3-L/16's {DINO_L_DEPTH} layers, got {config.encoder.rae_model!r}"
         )
+        # Default to all 24 rather than to the config's own aggregation_layers: see the class
+        # docstring -- old checkpoints' saved configs name the stock 7 while holding 24 weights.
+        layers = tuple(range(DINO_L_DEPTH)) if expose_layers is None else tuple(expose_layers)
+        assert len(set(layers)) == len(layers), f"duplicate entries in expose_layers: {layers}"
+        for layer in layers:
+            assert 0 <= layer < DINO_L_DEPTH, f"layer {layer} outside DINOv3-L's {DINO_L_DEPTH}"
+        # The consistency loss's targets are the stock 7 in every arm, and the encoder can only hand
+        # back features it was given, so an arm that doesn't read all 7 cannot hold the objective
+        # fixed. Checked here rather than discovered as a misaligned non-strict zip during training.
+        missing = [layer for layer in STOCK_LAYERS if layer not in layers]
+        assert not missing, f"expose_layers must cover STOCK_LAYERS; missing {missing}"
+
         # Build through mira's own VideoCodec.__init__ (so its encoder/decoder shape checks still
         # run, and stay in sync if mira ever changes them), but with a config whose encoder already
-        # reads all 24 layers -- so the frozen backbone it builds is the one we want and nothing is
-        # constructed twice.
-        super().__init__(all_layers_config(config), require_dino_weights=require_dino_weights)
+        # reads the layers we want -- so the frozen backbone it builds is the one we want and
+        # nothing is constructed twice.
+        super().__init__(exposing_layers(config, layers), require_dino_weights=require_dino_weights)
         # Upgrade that encoder in place rather than replacing the object: same modules, same frozen
         # backbone, same bottleneck projection and its initialisation. Only the aggregation step
         # differs, which is `forward` plus one new parameter. nn.Module.__setattr__ registers the
         # Parameter normally, so it appears in state_dict as `encoder.layer_weights`.
         self.encoder.__class__ = LearnedLayerMixEncoder
-        self.encoder.layer_weights = nn.Parameter(stock_equivalent_weights())
+        self.encoder.layer_weights = nn.Parameter(stock_equivalent_weights(layers))
+        # Positions (not DINOv3 block numbers) of the consistency loss's targets within `features`.
+        self.encoder.stock_feature_positions = tuple(layers.index(i) for i in STOCK_LAYERS)
 
 
 class VideoCodecFixedLayerMix(VideoCodecLearnedLayerMix):
@@ -189,75 +238,17 @@ class VideoCodecFixedLayerMix(VideoCodecLearnedLayerMix):
     cost identically, so the control absorbs it and the arm-to-arm delta isolates the aggregation.
 
     Frozen weights rather than a stock ``VideoCodec`` so the two arms stay byte-identical in
-    architecture, layer exposure and objective, differing only in whether the 24 aggregation weights
-    can move -- the same trick ``frozen_bottleneck.py`` used for the calibration arm.
-    """
-
-    def __init__(self, config: VideoCodecConfig, require_dino_weights: bool = True) -> None:
-        super().__init__(config, require_dino_weights=require_dino_weights)
-        self.encoder.layer_weights.requires_grad_(False)
-
-
-class VideoCodecLearn7LayerMix(VideoCodecLearnedLayerMix):
-    """EXPERIMENT 2's arm: learned weights, but only over mira's own 7 layers.
-
-    Experiment 1 changed two things at once relative to stock mira -- the per-layer weights became
-    *free*, and 17 additional DINOv3 layers (almost all shallower than anything the stock formula
-    reads) became *reachable*. Its result, with 92% of the learned mass landing on those 17, points
-    hard at reach, but pointing is not measuring. This arm holds reach at the stock formula's and
-    varies only freedom, so ``learn7 - control`` is the value of freedom alone and
-    ``learned_mix - learn7`` the value of reach. See
-    ``experiments/2026-09-08-decompose-layer-mix/NOTES.md`` for the pre-registered outcomes.
-
-    Which one wins matters beyond bookkeeping: mira keeps a residual on the deepest block
-    specifically to preserve semantics for the world model that predicts in this latent. A gain that
-    needs the shallow layers is in tension with that rationale; a gain that does not may be
-    compatible with it, which would be the far more useful result.
-
-    The 17 excluded weights are **genuinely** non-trainable, not merely initialised to zero. That
-    distinction is the one that matters, and it is not pedantic: the gradient with respect to a
-    layer weight is that layer's own feature tensor, which is nonzero *regardless of the weight
-    being 0*. Left trainable at a zero init they would therefore receive real gradients and drift
-    straight back into the latent, handing this arm exactly the reach it exists to withhold --
-    invisibly, since the run would still train and still produce a number. Measured rather than
-    assumed, in ``tests/test_learned_layer_mix.py``: ~0.3 after 200 steps.
-
-    The mechanism here is substitution --
-    :meth:`LearnedLayerMixEncoder.effective_layer_weights` reads a constant for the excluded layers,
-    so those parameter entries are simply not in the computation and their gradient is structurally
-    zero.
-
-    **A gradient mask would also have been correct for this arm**, and it is worth being accurate
-    about that rather than overselling the choice: with the gradient zeroed, AdamW leaves an entry
-    sitting at exactly 0.0, because its Adam step is zero and its decoupled decay term
-    ``p -= lr * wd * p`` also vanishes at ``p == 0``. Substitution is preferred for two smaller
-    reasons. It holds for *any* frozen value rather than only 0.0, where a mask would let decoupled
-    decay shrink a nonzero frozen weight away. And it makes the invariant structural -- the entry is
-    absent from the graph -- instead of depending on a hook firing every step inside a training loop
-    this project deliberately does not own (mira's ``train_codec.py``, run unmodified).
-
-    The consequence of substitution is that the guarantee is about the *effective* weight, not the
-    stored one. For this arm both are exact; in general the stored entries may drift under decay and
-    are simply never read. ``tests/test_learned_layer_mix.py`` pins the bit-exact invariant for this
-    configuration and the effective-value guarantee for the general case.
-
-    The mask and the frozen values are NON-PERSISTENT buffers, so ``state_dict`` still contains
-    exactly ``encoder.layer_weights`` and this arm warm-starts from the locked baseline through the
-    same ``KMIRA_FINETUNE_NEW_KEYS=encoder.layer_weights`` path as the other two.
+    architecture, layer exposure and objective, differing only in whether the aggregation weights
+    can move -- the same trick ``frozen_bottleneck.py`` used for the calibration arm. Freezing the
+    whole tensor is legitimate here precisely because it is all-or-nothing: ``requires_grad`` is a
+    per-tensor flag, and this arm wants every entry held.
     """
 
     def __init__(
         self,
         config: VideoCodecConfig,
         require_dino_weights: bool = True,
-        trainable_layers: tuple[int, ...] = STOCK_LAYERS,
+        expose_layers: Sequence[int] | None = None,
     ) -> None:
-        super().__init__(config, require_dino_weights=require_dino_weights)
-        mask = torch.zeros(DINO_L_DEPTH, dtype=torch.bool)
-        for layer in trainable_layers:
-            assert 0 <= layer < DINO_L_DEPTH, f"layer {layer} outside DINOv3-L's {DINO_L_DEPTH}"
-            mask[layer] = True
-        # Non-persistent: derived from the config, never loaded or saved, so the checkpoint surface
-        # stays identical to the other two arms.
-        self.encoder.register_buffer("layer_weight_trainable_mask", mask, persistent=False)
-        self.encoder.register_buffer("frozen_layer_weights", stock_equivalent_weights(), persistent=False)
+        super().__init__(config, require_dino_weights=require_dino_weights, expose_layers=expose_layers)
+        self.encoder.layer_weights.requires_grad_(False)

@@ -44,12 +44,13 @@ def test_model_config_composes_and_target_is_importable(model: str) -> None:
     assert codec_config.encoder.video.timesteps == 1
 
 
-def test_layer_mix_arms_differ_only_in_architecture_target() -> None:
-    """The three Experiment 1/2 arms must be identical apart from which weights can move.
+def test_layer_mix_arms_differ_only_in_target_and_exposure() -> None:
+    """The three Experiment 1/2 arms must be identical apart from the arm's own definition.
 
     They are separate YAML files, so a change to one can silently drift from the others -- and a
     drifted arm produces a number that looks fine and compares nothing. The variant docstrings and
-    NOTES.md all claim these differ in exactly one line; this is that claim, checked.
+    both NOTES.md claim these differ only in which weights can move and which layers they read;
+    this is that claim, checked.
     """
     arms = ["learned_layer_mix", "learned_layer_mix_control", "learned_layer_mix_learn7"]
     configs = {}
@@ -58,12 +59,28 @@ def test_layer_mix_arms_differ_only_in_architecture_target() -> None:
             cfg = compose(config_name="kmira_train_codec", overrides=[f"model={arm}"])
         configs[arm] = cfg.model
 
-    targets = {arm: cfg.architecture._target_ for arm, cfg in configs.items()}
-    assert len(set(targets.values())) == len(arms), f"arms share an architecture: {targets}"
-
     reference = configs["learned_layer_mix"]
     for arm in arms[1:]:
         assert configs[arm].loss == reference.loss, f"{arm}'s loss config drifted"
         assert configs[arm].architecture.config == reference.architecture.config, (
             f"{arm}'s codec config drifted from learned_layer_mix's"
+        )
+
+    # control differs by class (weights frozen); learn7 differs by exposure (reach withheld).
+    assert configs["learned_layer_mix_control"].architecture._target_ != reference.architecture._target_
+    assert configs["learned_layer_mix_learn7"].architecture._target_ == reference.architecture._target_
+    assert list(configs["learned_layer_mix_learn7"].architecture.expose_layers) == [
+        11,
+        13,
+        15,
+        17,
+        19,
+        21,
+        23,
+    ]
+    # The other two must NOT pin an exposure: they default to all 24, and that default is what
+    # keeps already-written checkpoint configs loading (see VideoCodecLearnedLayerMix's docstring).
+    for arm in ("learned_layer_mix", "learned_layer_mix_control"):
+        assert "expose_layers" not in configs[arm].architecture, (
+            f"{arm} pins an exposure; it must inherit the all-24 default"
         )
