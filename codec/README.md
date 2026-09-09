@@ -29,6 +29,7 @@ entire divergence from mira is configuration and small standalone patch modules 
   - `calib_frozen_bottleneck.yaml` — the calibration downgrade (a frozen random bottleneck,
     reproducing the paper's Table 4 "-1.4 dB" row).
   - `learned_layer_mix.yaml` / `learned_layer_mix_control.yaml` — Experiment 1 (below).
+  - `learned_layer_mix_learn7.yaml` — Experiment 2's `learn7` arm: freedom without reach.
 - `configs/baseline.yaml` — standalone config for the visualization script (not a training entry).
 - `scripts/run_calibration.sh` — the three-arm calibration run.
 - `scripts/run_plateau.sh` / `run_anneal.sh` — constant-LR plateau search, then cosine anneal.
@@ -71,15 +72,21 @@ Appendix Table 22 additionally ablates *which* DINO layers are aggregated — th
   272,000, is the number to compare a warm-started (constant-LR) run against — see the gotcha in
   `../AGENTS.md` about why those two numbers answer different questions.
 - **Experiment 1** (learned per-DINO-layer aggregation,
-  `src/kmira/codec/variants/learned_layer_mix.py`): warm-started from the locked baseline, reached
-  **27.905 dB at 200,000 steps, +3.16 dB over the 24.747 plateau it started from**, and not a
-  PSNR-only effect: SSIM/LPIPS/P-DINO/rFDD all improved together, while the paired control
-  (identical run, aggregation weights frozen) stayed flat at ~24.7 for every step it has been run.
-  Note the control is at 56,000 steps against this arm's 200,000, so it has not been observed
-  through the variant's jump at 104,000; extending it to a matched length is the current priority
-  (`../AGENTS.md`, "Next, in order"). Still climbing
-  as of the last reading (+0.07/8k steps). Check `results/benchmark.jsonl` (tags `learned_mix-*` /
-  `control-*`) for the current numbers, don't assume the outcome from this file.
+  `src/kmira/codec/variants/learned_layer_mix.py`): **complete, both arms at 200,000 steps.**
+  `learned_mix` 27.905 dB against `control` 24.992 dB — a paired, matched-step gain of
+  **+2.914 dB**, and not a PSNR-only effect: SSIM (0.8587 vs 0.8105), LPIPS (0.0820 vs 0.1059) and
+  rFDD (0.6209 vs 0.6740) all move together with it.
+
+  Quote the arm-to-arm gap, not "+3.16 dB over the plateau". The control ends 0.245 dB above the
+  24.747 plateau it warm-started from rather than dead flat, so the pre-registered rule applies
+  (`experiments/2026-08-13-learned-layer-mix/NOTES.md`) and the matched-step gap is the result.
+
+  The control's extension also closed the open question about the variant's jump at 104,000: both
+  arms show the same dip through 72k-96k and the same recovery at 104,000, so that shape belongs to
+  the shared seed schedule, not the intervention. The gap widens at 23 of 24 transitions, from
+  +0.236 at 8,000 to +2.914 at 200,000, still widening at the end but decelerating (+0.038/8k over
+  the last 40,000 steps, against +0.225/8k over the first 56,000). Check
+  `results/benchmark.jsonl` (tags `learned_mix-*` / `control-*`) for the numbers themselves.
 
   **Compare within this rig, not against the paper.** The 27.6 Base-decoder row in the table above
   is not a like-for-like target: this setup is image-only and reduced-scale, and its own faithful
@@ -87,12 +94,15 @@ Appendix Table 22 additionally ablates *which* DINO layers are aggregated — th
   delta against the locked baseline with its paired control, not crossing a number produced by a
   different setup.
 
-  **What changed**: the learned weights didn't reweight the paper's 7 blocks — they moved almost
-  entirely (~92% of the normalized vector) onto **layer 0**, the shallowest DINOv3 block, away from
-  the mid/late blocks `{11,...,23}` the stock formula uses. Read the *normalized* direction, not
-  the raw magnitudes — the aggregation's overall scale and the bottleneck projection's norm have an
-  exact scaling symmetry that weight decay resolves arbitrarily, so only relative weight is
-  identified.
+  **What changed**: the learned weights didn't reweight the paper's 7 blocks — they abandoned them.
+  At 200,000 steps **92.4% of the normalized mass sits on the 17 layers the stock formula never
+  reads**, 7.6% on the stock seven, with **layer 0** — the shallowest DINOv3 block — the largest
+  single share at 45.7% (84.6% by energy). Layer 23, which the stock formula deliberately
+  double-counts, fell from 1.1429 to 0.0003. Read the *normalized* direction, not the raw
+  magnitudes — the aggregation's overall scale and the bottleneck projection's norm have an exact
+  scaling symmetry that weight decay resolves arbitrarily, so only relative weight is identified.
+  (Earlier revisions of this file reported the 92% figure as mass on layer 0; it is the collective
+  share of the non-stock layers. Layer 0 dominates either way.)
 
   **Caveat before treating this as final**: the paper's own DINOv3-L layer choice (`sections/4.method.tex`)
   keeps a residual on the deepest selected block specifically to retain semantics that shallow

@@ -36,75 +36,63 @@ much smaller, single-GPU scale, using paired A/B comparisons against a locked ba
 - A calibrated, plateaued, annealed **baseline codec** is locked at
   `checkpoints/calibration/plateau_baseline/checkpoint-304000` (304k steps, PSNR 24.88). This is
   the fixed comparison point for every future variant.
-- **Experiment 1** (learned per-DINO-layer aggregation, replacing mira's fixed 7-layer mean) works:
-  warm-started from the locked baseline, reached 27.905 dB by step 200,000, +3.16 dB over the
-  24.747 plateau it started from, while a paired frozen-weight control stayed flat. Do not compare
-  that to the paper's 27.6 Base-decoder row: different setup, and this rig's own faithful baseline
-  sits at 24.75 where the paper's reaches 27.6. **The control is under-run**: it sits at step
-  56,000 against the variant's 200,000, so it has never been observed through the region where the
-  variant actually took off (a dip at 80k-96k, then a jump at 104,000). Closing that gap is the
-  current priority; see "Next, in order" below. But the learned
-  weights didn't reweight the paper's layers, they abandoned them for DINOv3's shallowest block;
-  the paper's own reasoning for its layer choice is about preserving semantics *for the world
-  model*, and its one relevant ablation favors depth there too — so this is a proven reconstruction
-  win with an open question about the downstream latent, not a settled result. Still running. See
+- **Experiment 1** (learned per-DINO-layer aggregation, replacing mira's fixed 7-layer mean) is
+  **complete and it works**: both arms warm-started from the locked baseline and run to 200,000
+  steps, `learned_mix` 27.905 dB against `control` 24.992 — a paired, matched-step **+2.914 dB**.
+  Quote that gap, not "+3.16 over the plateau": the control ends 0.245 above the plateau rather
+  than flat, which is the pre-registered "climbs a little" branch, and its rule is to report the
+  matched-step gap. Do not compare either number to the paper's 27.6 Base-decoder row: different
+  setup, and this rig's own faithful baseline sits at 24.75 where the paper's reaches 27.6.
+  Extending the control also settled what it was run for — the variant's "takeoff at 104,000" is a
+  shared artifact of the seed schedule, since both arms dip through 72k-96k and recover at 104,000,
+  and the gap itself widens at 23 of 24 transitions independently of it. What remains open is
+  downstream, not attribution: the learned weights didn't reweight the paper's layers, they
+  abandoned them (92.4% of normalized mass on the 17 non-stock layers, 45.7% on layer 0 alone); the
+  paper's own reasoning for its layer choice is about preserving semantics *for the world model*,
+  and its one relevant ablation favors depth there too — so this is a demonstrated reconstruction
+  win with an open question about the downstream latent, not a settled improvement to MIRA. See
   `codec/README.md`'s "Current state" and `codec/results/benchmark.jsonl` (tags `learned_mix-*` /
-  `control-*`) for the latest numbers — don't assume the outcome from this file.
+  `control-*`) for the numbers — don't assume the outcome from this file.
 - Hardcoded paths were removed in favor of `direnv` (`.envrc`) + two env vars
   (`RS_DINO_WEIGHTS_DIR`, `MIRA_TRAIN`) so the repo isn't tied to one machine.
 
 ## Next, in order
 
-Do these in sequence. Each one is cheap on its own and the order is deliberate: step 1 decides how
-much the existing result can be claimed at all, so it comes before any new idea.
+Step 1 (run the control to a matched length) is **done** — both arms sit at 200,000 steps and
+Experiment 1's attribution now rests on a full-length control. What follows is what is left.
 
-### 1. Run the control up to `learned_mix`'s length (priority)
+### 1. Experiment 2, `learn7` (priority; see `experiments/2026-09-08-decompose-layer-mix/NOTES.md`)
 
-`learned_mix` is at 200,000 steps, `control` at 56,000. Every attribution claim in this repo, the
-CHANGELOG, and the experiment notes rests on the control staying flat, and the control has not been
-run through the steps where the variant's gain appeared. Until it has, "the control stayed flat
-throughout" describes 56k steps, not the comparison.
+Experiment 1 changed two things at once: the weights became *free*, and 17 shallower layers became
+*reachable*. The result — 92.4% of the mass landing on layers the stock formula never reads —
+points hard at reach, but that is inference, not measurement. `learn7` measures it: the same
+machinery with only the stock 7 weights trainable. `learn7` minus `control` is the value of
+freedom; `learned_mix` minus `learn7` is the value of reach.
+
+This matters more than tidiness, because reach is exactly what is in tension with mira's semantic
+rationale. If freedom alone recovers most of the gain, there is a version of this result that is
+compatible with the paper's layer choice instead of opposed to it.
+
+Scaffolding is in place: `VideoCodecLearn7LayerMix` in
+`src/kmira/codec/variants/learned_layer_mix.py`, `codec/configs/model/learned_layer_mix_learn7.yaml`,
+a `learn7` arm in the launcher, and `tests/test_learned_layer_mix.py::test_learn7_freezes_non_stock_layers`
+asserting the excluded weights survive an optimizer step unchanged. What is left is the compute:
 
 ```bash
-bash codec/scripts/run_learned_layer_mix_warmstart.sh 1 control    # 8k steps, ~1h + ~6min scoring
+bash codec/scripts/run_learned_layer_mix_warmstart.sh 1 learn7    # 8k steps, ~1h + ~6min scoring
 ```
 
 HOURS is relative and per arm: each invocation runs that many hours more from wherever the arm
-currently sits. Repeat until the control reaches ~200,000, roughly 18 hourly chunks, or at minimum
-past ~120,000 to clear the variant's jump at 104,000.
+currently sits. Repeat to ~200,000 to match the other two arms, roughly 25 hourly chunks. There is
+no shortcut to a shorter run here — the gap between the existing arms was still widening at 200k,
+so a `learn7` stopped early would understate whichever component it measures.
 
-**Pre-registered outcomes**, so this is not read after the fact:
+**Pre-registered outcomes** are in that NOTES.md and were written before the run. Read them there
+rather than deciding after the fact.
 
-- Control stays at 24.5-24.7 through 200k: Experiment 1's attribution holds as written. Nothing to
-  change beyond deleting this caveat.
-- Control climbs materially after 56k: the warm-restart penalty was still unwinding and part of the
-  variant's gain is recovery rather than the aggregation. The headline weakens and must be
-  restated as the arm-to-arm gap at matched steps, not as +3.16 dB over the plateau. Say so
-  plainly in the CHANGELOG if it happens; do not quietly requote.
-- Control climbs a little: report the gap at matched steps and use that as the result.
+### 2. Experiment 3, cold start (see `experiments/2026-09-08-cold-start-layer-mix/NOTES.md`)
 
-### 2. Experiment 2, `learn7` (see `experiments/2026-09-08-decompose-layer-mix/NOTES.md`)
-
-Not implemented yet. Three pieces, none large:
-
-1. A trainable-index option on `VideoCodecLearnedLayerMix` restricting which layer weights are
-   trainable. The 17 non-stock weights must be **genuinely non-trainable**, not merely initialised
-   to zero: AdamW's `weight_decay=0.1` plus gradient noise on a zero-initialised trainable scalar
-   would let them drift and silently hand back the reach the arm exists to withhold.
-2. `codec/configs/model/learned_layer_mix_learn7.yaml`, alongside the existing variant and control
-   configs, differing only in that option.
-3. A third case in `run_learned_layer_mix_warmstart.sh`'s arm parser, with its own
-   `warmstart_learn7` output dir and `learn7-*` benchmark tags.
-
-Plus a test asserting the excluded weights are unchanged after an optimizer step, in the style of
-`tests/test_learned_layer_mix.py`.
-
-Then run it to a length comparable with the other arms (~200k), same warm start from
-`checkpoint-304000`, same per-chunk seed schedule, same pinned consistency loss.
-
-### 3. Experiment 3, cold start (see `experiments/2026-09-08-cold-start-layer-mix/NOTES.md`)
-
-Queued behind 2. Its comparison arm already exists, since the locked baseline is itself a
+Queued behind 1. Its comparison arm already exists, since the locked baseline is itself a
 cold-start run under the same protocol.
 
 ## Conventions worth preserving
@@ -156,11 +144,16 @@ any of these costs real time or a real bug, so they live here rather than only i
 - **`/tmp` is tmpfs (RAM-backed), and this machine has only ~512MB of swap.** A memory spike (e.g.
   writing a multi-GB checkpoint there) hard-locks the machine instead of degrading gracefully.
   Never write checkpoints or large scratch files under `/tmp`.
-- **Annealing a converged constant-LR run to a low LR buys real dB that constant LR alone never
-  reaches — but that gain is a property of the low LR, not a better region of parameter space.** A
-  warm start (`finetune_from`) resets the optimizer and raises the LR back up, so it can never reach
-  the annealed number no matter how long it runs. Compare a constant-LR warm-start against the
-  pre-anneal plateau, not the post-anneal one.
+- **Annealing a converged constant-LR run to a low LR buys real dB, and a warm start gives it
+  straight back.** A warm start (`finetune_from`) resets the optimizer and raises the LR again, so
+  it drops below the annealed number and spends tens of thousands of steps recovering. Compare a
+  constant-LR warm start against the pre-anneal plateau (24.747), not the post-anneal one (24.885).
+  This entry used to say a warm start "can never reach the annealed number no matter how long it
+  runs" — **that was too strong and is now measured false**: Experiment 1's control, which is the
+  locked baseline continued at constant LR, passed 24.885 and finished at 24.992 by step 200,000.
+  The rule of thumb still holds for reading a short run; the "never" did not. Corollary worth
+  keeping: the plateau called at 272,000 was a stopping point, not an asymptote — constant LR was
+  still buying ~+0.03 dB per 8k steps out at 200k.
 - **`auto_weight` (on in every arm) rescales each perceptual term every step by the ratio of its
   gradient norm to the L1 anchor's, at the decoder's last layer** (VQ-GAN style, `codec/loss.py`).
   It is a per-step normalization, not a schedule and not a learned parameter, so it holds the loss

@@ -23,17 +23,18 @@ run should be read against).
 
 **Experiment 1, learned per-layer DINO aggregation.** mira aggregates a fixed set of 7 DINOv3
 layers with uniform weights, RAEv2's k=7 default, adopted unchanged. Replacing that with 24 learned
-per-layer weights, initialised to reproduce the stock formula exactly, gained **+3.16 dB PSNR over
-the 24.747 plateau** by step 200k, with SSIM, LPIPS, P-DINO and rFDD improving alongside it, while
-a paired control with the weights frozen stayed at 24.5-24.7. The flat control is what makes the
-gain attributable to the aggregation rather than to the warm restart, with one caveat currently
-open: the control has been run to 56k steps against the variant's 200k, so it has not yet been
-observed through the region where the variant's gain appeared. Extending it is the next thing to
-do (see AGENTS.md, "Next, in order").
+per-layer weights, initialised to reproduce the stock formula exactly, reached **27.905 dB against
+its paired control's 24.992 at a matched 200k steps — +2.914 dB**, with SSIM, LPIPS and rFDD
+improving alongside. Both arms are now complete at 200k, so that gap rests on a control observed
+over the variant's full length rather than a quarter of it, and it is the control that makes the
+gain attributable to the aggregation rather than to the warm restart. Extending the control also
+showed that the variant's apparent takeoff at 104k is a feature of the shared seed schedule — both
+arms dip through 72k-96k and recover at 104k — while the gap itself widens steadily throughout.
 
 **What that does not show.** This benchmark scores reconstruction only. The learned weights put
-~92% of their normalized mass on DINOv3's shallowest block, away from the deeper blocks mira's
-formula keeps in order to preserve semantics for the world model that predicts in this latent.
+92% of their normalized mass on the 17 layers mira's formula never reads — nearly half of it on
+DINOv3's shallowest block alone — and away from the deeper blocks mira keeps in order to preserve
+semantics for the world model that predicts in this latent.
 Whether the gain survives downstream is untested here, and there are reasons to expect it might
 not. Treat it as a reconstruction result with an open question attached, not as an improvement to
 MIRA.
