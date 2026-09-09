@@ -135,12 +135,10 @@ def test_learn7_freezes_non_stock_layers() -> None:
     was built to withhold and measures nothing -- and it would do so invisibly, since the run would
     still train and still produce a number.
 
-    Uses the real optimizer configuration, ``AdamW(weight_decay=0.1)``, because that is where the
-    subtle failure lives: AdamW's weight decay is DECOUPLED, so it moves a parameter from its own
-    value on every step regardless of gradient. Merely zeroing the gradient of the excluded entries
-    -- the obvious implementation -- would leave them decaying toward zero from their init, and for
-    ``learn7``'s excluded layers (init exactly 0.0) that decay is invisible. So the test also drives
-    a *non-zero* init through the same path, where a decoupled-decay leak would actually show.
+    Uses the real optimizer configuration, ``AdamW(weight_decay=0.1)``, and drives a real gradient
+    into the trainable entries so that "nothing moved" cannot pass vacuously. See
+    ``test_zero_init_alone_does_not_freeze_a_layer_weight`` for the failure this is guarding
+    against, which is a *gradient* leak rather than a weight-decay one.
     """
     torch.manual_seed(0)
     encoder = _BareMixEncoder(STOCK_LAYERS)
@@ -170,22 +168,71 @@ def test_learn7_freezes_non_stock_layers() -> None:
     assert len(moved) == len(STOCK_LAYERS), f"only {moved} of the stock layers moved"
 
 
-def test_frozen_layers_hold_their_value_under_decoupled_weight_decay() -> None:
-    """A frozen layer's EFFECTIVE weight is exact even where AdamW's decay moves its storage.
+def test_zero_init_alone_does_not_freeze_a_layer_weight() -> None:
+    """The hazard the mechanism exists for: a zero-initialised weight left TRAINABLE drifts.
 
-    The guarantee this variant makes is about ``effective_layer_weights`` -- what the aggregation
-    multiplies the features by -- not about the raw parameter entry, and the difference is real
-    rather than pedantic. AdamW's weight decay is DECOUPLED (``p -= lr * wd * p``), so it moves
-    every entry of the ``layer_weights`` tensor on every step regardless of gradient, including
-    entries no gradient reaches. Excluded entries therefore DO drift in storage. They are inert:
-    :meth:`effective_layer_weights` substitutes the constant in ``frozen_layer_weights`` before the
-    features ever see them, so nothing that drifts is ever read.
+    Pre-registered in ``experiments/2026-09-08-decompose-layer-mix/NOTES.md`` as the thing that must
+    not happen, and worth a test because the intuition runs the other way -- a weight sitting at 0.0
+    looks inert. It is not. The aggregation is ``sum(w_i * f_i)``, so the gradient with respect to
+    ``w_i`` is ``f_i``, the layer's own features, which is nonzero *regardless of ``w_i`` being 0*.
+    Excluded weights left trainable therefore receive real gradients on every step and walk away
+    from zero, putting the shallow layers back into the latent and silently handing ``learn7`` the
+    reach it exists to withhold.
 
-    ``learn7`` as actually configured never exercises that drift -- its 17 excluded entries start at
-    exactly 0.0 and ``p -= lr * wd * p`` leaves 0.0 at 0.0, which
-    ``test_learn7_freezes_non_stock_layers`` pins down as a bit-exact invariant. This test covers the
-    general case anyway, by freezing layer 23 (init 8/7) where decay genuinely bites, so that the
-    substitution is verified rather than the accident of a zero init.
+    This is the measurement behind that claim, so the docstrings can assert it rather than reason
+    about it.
+    """
+    torch.manual_seed(0)
+    weights = nn.Parameter(stock_equivalent_weights())
+    opt = torch.optim.AdamW([weights], lr=1e-2, weight_decay=0.1)
+    excluded = [layer for layer in range(DINO_L_DEPTH) if layer not in STOCK_LAYERS]
+
+    for _ in range(200):
+        opt.zero_grad()
+        (weights * torch.randn(DINO_L_DEPTH)).sum().backward()
+        opt.step()
+
+    assert weights.detach()[excluded].abs().max() > 0.1, (
+        "a zero-initialised trainable layer weight was expected to drift; if this now holds still, "
+        "the reasoning in VideoCodecLearn7LayerMix's docstring needs revisiting"
+    )
+
+
+def test_a_gradient_mask_would_also_have_held_at_a_zero_init() -> None:
+    """Records what substitution is and is NOT bought with, so the choice is not oversold.
+
+    For ``learn7``'s actual configuration a gradient mask would have been correct too: with the
+    gradient zeroed, AdamW leaves an entry at exactly 0.0, because its Adam step is zero and its
+    decoupled decay term ``p -= lr * wd * p`` also vanishes at ``p == 0``. Substitution is preferred
+    for two narrower reasons -- it holds for any frozen value, not only 0.0, and it is structural
+    rather than depending on a hook firing inside mira's unmodified training loop -- and this test
+    exists so a future reader is not told the stronger, false story that a mask would have leaked
+    here.
+    """
+    torch.manual_seed(0)
+    weights = nn.Parameter(stock_equivalent_weights())
+    opt = torch.optim.AdamW([weights], lr=1e-2, weight_decay=0.1)
+    trainable = torch.zeros(DINO_L_DEPTH, dtype=torch.bool)
+    for layer in STOCK_LAYERS:
+        trainable[layer] = True
+
+    for _ in range(200):
+        opt.zero_grad()
+        (weights * torch.randn(DINO_L_DEPTH)).sum().backward()
+        weights.grad[~trainable] = 0.0
+        opt.step()
+
+    assert torch.equal(weights.detach()[~trainable], torch.zeros(int((~trainable).sum())))
+
+
+def test_substitution_also_holds_a_NONZERO_frozen_value() -> None:
+    """Where substitution is strictly stronger than a gradient mask: a frozen value that is not 0.
+
+    AdamW's decoupled decay moves a parameter from its own value even at zero gradient, so a masked
+    weight frozen at 8/7 WOULD shrink away. Substitution does not care: the aggregation reads the
+    constant in ``frozen_layer_weights``, so the effective value is exact no matter what the stored
+    entry does. ``learn7`` never exercises this -- all its excluded entries are 0.0 -- but the
+    option is what makes the mechanism reusable for a future arm that freezes a real weight.
     """
     torch.manual_seed(0)
     frozen_layer = STOCK_LAYERS[-1]
@@ -204,8 +251,7 @@ def test_frozen_layers_hold_their_value_under_decoupled_weight_decay() -> None:
     # The value the aggregation uses is exactly the init, to the bit, after five decayed steps.
     assert float(encoder.effective_layer_weights()[frozen_layer].detach()) == before
     assert float(encoder.layer_weights.grad[frozen_layer]) == 0.0
-    # ...even though the raw storage has drifted, which is precisely why the substitution exists
-    # rather than a gradient mask. A gradient mask alone would have let this leak into the latent.
+    # ...even though the raw storage HAS drifted, which is the whole difference from a mask.
     assert float(encoder.layer_weights[frozen_layer].detach()) != before
 
 

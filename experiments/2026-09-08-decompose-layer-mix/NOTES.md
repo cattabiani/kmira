@@ -68,27 +68,40 @@ A `trainable_layers` option on `VideoCodecLearn7LayerMix`, a subclass of
 - `codec/scripts/report_layer_mix.py` — now reports all three arms and prints the
   freedom/reach decomposition directly once `learn7` has scored checkpoints.
 
-**How the exclusion is enforced, and why not the obvious way.** The excluded weights are
-*substituted out of the forward pass* — the aggregation reads a constant for them — rather than
-having their gradients masked. Masking the gradient is the obvious implementation and it silently
-fails: AdamW's weight decay is *decoupled*, so it moves a parameter from its own value even when
-the gradient is exactly zero. Masked weights would creep off their init and back into the latent,
-handing this arm precisely the reach it exists to withhold, and invisibly — the run would still
-train and still produce a number.
+**How the exclusion is enforced.** The hazard is the one the pre-registration named: initialising
+the 17 weights to zero and leaving them trainable is *not* enough. The aggregation is
+`sum(w_i * f_i)`, so the gradient with respect to `w_i` is `f_i`, the layer's own features — which
+is nonzero regardless of `w_i` being 0. Left trainable they receive real gradients every step and
+walk away from zero, putting the shallow layers back into the latent and handing this arm the reach
+it exists to withhold, invisibly, because the run would still train and still produce a number.
+Measured, not assumed: ~0.3 after 200 steps
+(`tests/test_learned_layer_mix.py::test_zero_init_alone_does_not_freeze_a_layer_weight`).
 
-That failure mode is not hypothetical, and it was observed rather than reasoned about. The
-substitution was in place from the start, so this is not a bug that shipped; what happened is that
-the first draft of the test asserted the *stored* parameter entries were unchanged after an
-optimizer step. That held for this arm's real configuration (excluded entries init at 0.0) and
-failed for a stress case freezing layer 23 instead, whose init of 8/7 read 1.1372 after five steps
-at `weight_decay=0.1` with zero gradient throughout. That is decoupled decay caught in the act, and
-it is the direct evidence that a gradient mask would have leaked.
+The mechanism is substitution: `effective_layer_weights()` reads a constant for the excluded
+layers, so those parameter entries are absent from the graph and their gradient is structurally
+zero.
 
-Note the guarantee's exact shape, which is narrower than "frozen": the *effective* weight is a
-constant, while the raw parameter entries still drift in storage under decay. They are
-inert, and for this arm's real configuration they do not drift at all (init exactly 0.0, and
-`p -= lr*wd*p` leaves 0.0 at 0.0). `tests/test_learned_layer_mix.py` pins both the bit-exact
-invariant for this configuration and the general substitution guarantee where decay does bite.
+**A gradient mask would also have been correct here**, and the record should say so rather than
+oversell the choice. With the gradient zeroed, AdamW leaves an entry at exactly 0.0 — its Adam step
+is zero, and its decoupled decay term `p -= lr*wd*p` also vanishes at `p == 0`. Both approaches are
+exact for this arm; there is a test pinning that
+(`test_a_gradient_mask_would_also_have_held_at_a_zero_init`). Substitution is preferred for two
+narrower reasons:
+
+1. It holds for *any* frozen value, not only 0.0. A mask would let decoupled decay shrink a nonzero
+   frozen weight away — layer 23's 8/7 init reads 1.1372 after five steps at `weight_decay=0.1`
+   with zero gradient throughout. `learn7` never has a nonzero frozen value, so this is about
+   reusability for a future arm, not about this one.
+2. It is structural rather than procedural: the entry is not in the computation, so nothing has to
+   fire each step inside mira's `train_codec.py`, which this project runs unmodified and does not
+   own.
+
+An earlier revision of this file claimed a gradient mask "would have leaked" here. That was wrong —
+it generalised from the nonzero stress case above to an arm that has no nonzero frozen values.
+
+The consequence of substitution is that the guarantee is about the *effective* weight rather than
+the stored one: in general the excluded entries may drift in storage under decay and are simply
+never read. For `learn7` both are exact, since 0.0 decays to 0.0.
 
 The mask and frozen values are non-persistent buffers, so `state_dict` still holds exactly
 `encoder.layer_weights` and this arm warm-starts from `checkpoint-304000` through the same

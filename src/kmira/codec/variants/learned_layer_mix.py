@@ -101,11 +101,13 @@ class LearnedLayerMixEncoder(RAEEncoder):
         constant instead, so no gradient reaches them and no optimizer state can move what the
         aggregation actually uses.
 
-        Substituting here rather than masking the gradient is what makes the exclusion airtight.
-        AdamW's *decoupled* ``weight_decay=0.1`` updates a parameter from its own value even when
-        its gradient is exactly zero, so a gradient hook would let an excluded weight drift off its
-        init and back into the latent. Excluded entries of ``layer_weights`` do still drift under
-        that decay; they are simply never read.
+        Substituting here rather than masking the gradient makes the exclusion structural: the entry
+        is absent from the graph, so nothing needs to run each step for it to hold. It also keeps
+        working for a *nonzero* frozen value, where a gradient mask would not -- AdamW's *decoupled*
+        ``weight_decay`` updates a parameter from its own value even at zero gradient, so a masked
+        nonzero weight would shrink away. (At exactly 0.0, this arm's case, a mask would have been
+        fine; see :class:`VideoCodecLearn7LayerMix`.) The excluded entries of ``layer_weights`` do
+        still drift under that decay; they are simply never read.
         """
         mask = getattr(self, "layer_weight_trainable_mask", None)
         if mask is None:
@@ -212,21 +214,32 @@ class VideoCodecLearn7LayerMix(VideoCodecLearnedLayerMix):
     needs the shallow layers is in tension with that rationale; a gain that does not may be
     compatible with it, which would be the far more useful result.
 
-    The 17 excluded weights are **genuinely** non-trainable, not merely initialised to zero. They
-    are substituted out of the forward pass by
-    :meth:`LearnedLayerMixEncoder.effective_layer_weights`, so the value the aggregation multiplies
-    the features by is a constant no gradient reaches and no optimizer state can move. Note what
-    that does and does not promise: AdamW's decoupled weight decay still touches every entry of the
-    ``layer_weights`` tensor each step, so the excluded entries drift *in storage*. They are inert
-    -- nothing reads them -- and for this arm's actual configuration they do not even drift, since
-    they start at exactly 0.0 and ``p -= lr * wd * p`` leaves 0.0 at 0.0.
+    The 17 excluded weights are **genuinely** non-trainable, not merely initialised to zero. That
+    distinction is the one that matters, and it is not pedantic: the gradient with respect to a
+    layer weight is that layer's own feature tensor, which is nonzero *regardless of the weight
+    being 0*. Left trainable at a zero init they would therefore receive real gradients and drift
+    straight back into the latent, handing this arm exactly the reach it exists to withhold --
+    invisibly, since the run would still train and still produce a number. Measured rather than
+    assumed, in ``tests/test_learned_layer_mix.py``: ~0.3 after 200 steps.
 
-    Substitution rather than a gradient mask is the whole point. Masking the gradient is the obvious
-    implementation and it silently fails: decoupled decay moves a parameter from its own value with
-    no gradient involved, so masked weights would creep off their init and back into the latent,
-    handing this arm exactly the reach it exists to withhold -- invisibly, since the run would still
-    train and still produce a number. ``tests/test_learned_layer_mix.py`` pins both the bit-exact
-    invariant for this configuration and the general substitution guarantee where decay does bite.
+    The mechanism here is substitution --
+    :meth:`LearnedLayerMixEncoder.effective_layer_weights` reads a constant for the excluded layers,
+    so those parameter entries are simply not in the computation and their gradient is structurally
+    zero.
+
+    **A gradient mask would also have been correct for this arm**, and it is worth being accurate
+    about that rather than overselling the choice: with the gradient zeroed, AdamW leaves an entry
+    sitting at exactly 0.0, because its Adam step is zero and its decoupled decay term
+    ``p -= lr * wd * p`` also vanishes at ``p == 0``. Substitution is preferred for two smaller
+    reasons. It holds for *any* frozen value rather than only 0.0, where a mask would let decoupled
+    decay shrink a nonzero frozen weight away. And it makes the invariant structural -- the entry is
+    absent from the graph -- instead of depending on a hook firing every step inside a training loop
+    this project deliberately does not own (mira's ``train_codec.py``, run unmodified).
+
+    The consequence of substitution is that the guarantee is about the *effective* weight, not the
+    stored one. For this arm both are exact; in general the stored entries may drift under decay and
+    are simply never read. ``tests/test_learned_layer_mix.py`` pins the bit-exact invariant for this
+    configuration and the effective-value guarantee for the general case.
 
     The mask and the frozen values are NON-PERSISTENT buffers, so ``state_dict`` still contains
     exactly ``encoder.layer_weights`` and this arm warm-starts from the locked baseline through the

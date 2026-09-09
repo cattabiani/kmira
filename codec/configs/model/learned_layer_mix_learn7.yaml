@@ -14,11 +14,14 @@
 # it implies). Same warm start from checkpoint-304000, same seed schedule, same pinned 7-layer
 # consistency loss -- so all three arms stay directly comparable.
 #
-# The 17 excluded weights are genuinely frozen, not just initialised to zero: they are substituted
-# out of the forward pass, so no gradient reaches them and AdamW's decoupled weight decay cannot
-# shrink them off their init either. See VideoCodecLearn7LayerMix in
-# ../../../src/kmira/codec/variants/learned_layer_mix.py, and the optimizer-step test in
-# ../../../tests/test_learned_layer_mix.py.
+# The 17 excluded weights are genuinely frozen, not just initialised to zero -- which matters
+# because a zero weight still receives a real gradient here (d(sum w_i f_i)/dw_i = f_i, independent
+# of w_i), so left trainable they would drift back into the latent and hand this arm the reach it
+# exists to withhold. They are substituted out of the forward pass instead, so their gradient is
+# structurally zero. See VideoCodecLearn7LayerMix in
+# ../../../src/kmira/codec/variants/learned_layer_mix.py and the optimizer-step tests in
+# ../../../tests/test_learned_layer_mix.py, which also record that a gradient mask would have been
+# correct for this arm too -- substitution is chosen for generality, not because a mask would leak.
 
 loss:
   _target_: mira.codec.CodecLoss
