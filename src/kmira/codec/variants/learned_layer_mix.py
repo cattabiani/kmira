@@ -93,6 +93,25 @@ class LearnedLayerMixEncoder(RAEEncoder):
     so there is nothing an ``__init__`` would need to do that hasn't already been done.
     """
 
+    def effective_layer_weights(self) -> Tensor:
+        """The weights the aggregation actually uses.
+
+        Identity on ``layer_weights`` unless a trainable subset was requested (see
+        :class:`VideoCodecLearn7LayerMix`), in which case the excluded entries are read from a
+        constant instead, so no gradient reaches them and no optimizer state can move what the
+        aggregation actually uses.
+
+        Substituting here rather than masking the gradient is what makes the exclusion airtight.
+        AdamW's *decoupled* ``weight_decay=0.1`` updates a parameter from its own value even when
+        its gradient is exactly zero, so a gradient hook would let an excluded weight drift off its
+        init and back into the latent. Excluded entries of ``layer_weights`` do still drift under
+        that decay; they are simply never read.
+        """
+        mask = getattr(self, "layer_weight_trainable_mask", None)
+        if mask is None:
+            return self.layer_weights
+        return torch.where(mask, self.layer_weights, self.frozen_layer_weights)
+
     def forward(self, video: Tensor) -> RAEEncoderOutputs:
         video = (video + 1) / 2  # VideoCodec normalizes to [-1, 1]; DinoModel expects [0, 1].
 
@@ -104,7 +123,7 @@ class LearnedLayerMixEncoder(RAEEncoder):
         # Summing in place needs only the running total and one temporary. The features themselves
         # must stay alive regardless -- dino_forward returns them all at once, and they are handed
         # back as `dino_features` for the consistency loss to use as targets.
-        agg = sum(w * f for w, f in zip(self.layer_weights.unbind(), features, strict=True))
+        agg = sum(w * f for w, f in zip(self.effective_layer_weights().unbind(), features, strict=True))
 
         if isinstance(self.rae_projection, nn.Conv3d):
             x = rearrange(agg, "b t c h w -> b c t h w")
@@ -175,3 +194,57 @@ class VideoCodecFixedLayerMix(VideoCodecLearnedLayerMix):
     def __init__(self, config: VideoCodecConfig, require_dino_weights: bool = True) -> None:
         super().__init__(config, require_dino_weights=require_dino_weights)
         self.encoder.layer_weights.requires_grad_(False)
+
+
+class VideoCodecLearn7LayerMix(VideoCodecLearnedLayerMix):
+    """EXPERIMENT 2's arm: learned weights, but only over mira's own 7 layers.
+
+    Experiment 1 changed two things at once relative to stock mira -- the per-layer weights became
+    *free*, and 17 additional DINOv3 layers (almost all shallower than anything the stock formula
+    reads) became *reachable*. Its result, with 92% of the learned mass landing on those 17, points
+    hard at reach, but pointing is not measuring. This arm holds reach at the stock formula's and
+    varies only freedom, so ``learn7 - control`` is the value of freedom alone and
+    ``learned_mix - learn7`` the value of reach. See
+    ``experiments/2026-09-08-decompose-layer-mix/NOTES.md`` for the pre-registered outcomes.
+
+    Which one wins matters beyond bookkeeping: mira keeps a residual on the deepest block
+    specifically to preserve semantics for the world model that predicts in this latent. A gain that
+    needs the shallow layers is in tension with that rationale; a gain that does not may be
+    compatible with it, which would be the far more useful result.
+
+    The 17 excluded weights are **genuinely** non-trainable, not merely initialised to zero. They
+    are substituted out of the forward pass by
+    :meth:`LearnedLayerMixEncoder.effective_layer_weights`, so the value the aggregation multiplies
+    the features by is a constant no gradient reaches and no optimizer state can move. Note what
+    that does and does not promise: AdamW's decoupled weight decay still touches every entry of the
+    ``layer_weights`` tensor each step, so the excluded entries drift *in storage*. They are inert
+    -- nothing reads them -- and for this arm's actual configuration they do not even drift, since
+    they start at exactly 0.0 and ``p -= lr * wd * p`` leaves 0.0 at 0.0.
+
+    Substitution rather than a gradient mask is the whole point. Masking the gradient is the obvious
+    implementation and it silently fails: decoupled decay moves a parameter from its own value with
+    no gradient involved, so masked weights would creep off their init and back into the latent,
+    handing this arm exactly the reach it exists to withhold -- invisibly, since the run would still
+    train and still produce a number. ``tests/test_learned_layer_mix.py`` pins both the bit-exact
+    invariant for this configuration and the general substitution guarantee where decay does bite.
+
+    The mask and the frozen values are NON-PERSISTENT buffers, so ``state_dict`` still contains
+    exactly ``encoder.layer_weights`` and this arm warm-starts from the locked baseline through the
+    same ``KMIRA_FINETUNE_NEW_KEYS=encoder.layer_weights`` path as the other two.
+    """
+
+    def __init__(
+        self,
+        config: VideoCodecConfig,
+        require_dino_weights: bool = True,
+        trainable_layers: tuple[int, ...] = STOCK_LAYERS,
+    ) -> None:
+        super().__init__(config, require_dino_weights=require_dino_weights)
+        mask = torch.zeros(DINO_L_DEPTH, dtype=torch.bool)
+        for layer in trainable_layers:
+            assert 0 <= layer < DINO_L_DEPTH, f"layer {layer} outside DINOv3-L's {DINO_L_DEPTH}"
+            mask[layer] = True
+        # Non-persistent: derived from the config, never loaded or saved, so the checkpoint surface
+        # stays identical to the other two arms.
+        self.encoder.register_buffer("layer_weight_trainable_mask", mask, persistent=False)
+        self.encoder.register_buffer("frozen_layer_weights", stock_equivalent_weights(), persistent=False)

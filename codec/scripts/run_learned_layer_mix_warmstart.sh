@@ -5,6 +5,19 @@
 #   bash codec/scripts/run_learned_layer_mix_warmstart.sh 1                   # 1h MORE, variant only
 #   bash codec/scripts/run_learned_layer_mix_warmstart.sh 4                   # 4h MORE, variant only
 #   bash codec/scripts/run_learned_layer_mix_warmstart.sh 4 control,learned_mix  # + paired control
+#   bash codec/scripts/run_learned_layer_mix_warmstart.sh 4 learn7               # Experiment 2's arm
+#
+# THREE ARMS ARE DEFINED, all warm-started from the same locked baseline with the same seed
+# schedule and the same pinned 7-layer consistency loss, differing only in which of the 24
+# aggregation weights can move:
+#
+#   control      none can move (frozen at the stock-equivalent init) -- absorbs the warm restart
+#   learn7       only the stock 7 can move -- Experiment 2: freedom without reach
+#   learned_mix  all 24 can move -- Experiment 1: freedom with reach
+#
+# So learn7 - control is the value of freedom, and learned_mix - learn7 the value of reach. Both
+# of the Experiment 1 arms are complete at 200,000 steps (+2.914 dB); learn7 is the one still to
+# run. See experiments/2026-09-08-decompose-layer-mix/NOTES.md.
 #
 # HOURS IS RELATIVE, NOT ABSOLUTE: each arm resumes from wherever its own checkpoint directory
 # currently sits and trains HOURS more from there -- an arm at step 64000 given HOURS=7 runs to
@@ -56,8 +69,8 @@ esac
 
 for arm in ${ARMS//,/ }; do
   case "$arm" in
-    control|learned_mix) ;;
-    *) echo "usage: arms must be 'control', 'learned_mix', or 'control,learned_mix' (got '$arm')" >&2; exit 1 ;;
+    control|learned_mix|learn7) ;;
+    *) echo "usage: arms must be 'control', 'learned_mix' and/or 'learn7', comma-separated (got '$arm')" >&2; exit 1 ;;
   esac
 done
 
@@ -216,12 +229,14 @@ run_arm () {
 
 START=$(date +%s)
 
-# Both arms declare encoder.layer_weights as the expected-new key: the control has that parameter
-# too (frozen), so both load the same stock baseline checkpoint the same way.
+# All three arms declare encoder.layer_weights as the expected-new key: control has that parameter
+# too (frozen) and learn7 keeps its mask/frozen-value tensors as NON-PERSISTENT buffers, so every
+# arm's checkpoint surface is identical and all three load the same stock baseline the same way.
 for arm in ${ARMS//,/ }; do
   case "$arm" in
     control)     run_arm control     learned_layer_mix_control "encoder.layer_weights" control ;;
     learned_mix) run_arm learned_mix learned_layer_mix         "encoder.layer_weights" learned_mix ;;
+    learn7)      run_arm learn7      learned_layer_mix_learn7  "encoder.layer_weights" learn7 ;;
   esac
 done
 

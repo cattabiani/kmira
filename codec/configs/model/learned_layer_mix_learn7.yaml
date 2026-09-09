@@ -1,0 +1,71 @@
+# EXPERIMENT 2's `learn7` arm: the per-layer aggregation weights are learnable, but only over the
+# stock 7 layers -- the 17 layers Experiment 1's variant reached into are held at zero and cannot
+# move.
+#
+# Experiment 1 changed two things at once: FREEDOM (the weights became learnable) and REACH (17
+# extra, mostly shallower, DINOv3 layers became available). It gained +2.914 dB over its paired
+# control at a matched 200,000 steps, with ~92% of the learned mass landing on those 17 layers --
+# which points at reach, but does not measure it. This arm varies freedom alone:
+#
+#   learn7      - control  = the value of freedom
+#   learned_mix - learn7   = the value of reach
+#
+# Identical to model/learned_layer_mix.yaml except `architecture._target_` (and the `trainable_layers`
+# it implies). Same warm start from checkpoint-304000, same seed schedule, same pinned 7-layer
+# consistency loss -- so all three arms stay directly comparable.
+#
+# The 17 excluded weights are genuinely frozen, not just initialised to zero: they are substituted
+# out of the forward pass, so no gradient reaches them and AdamW's decoupled weight decay cannot
+# shrink them off their init either. See VideoCodecLearn7LayerMix in
+# ../../../src/kmira/codec/variants/learned_layer_mix.py, and the optimizer-step test in
+# ../../../tests/test_learned_layer_mix.py.
+
+loss:
+  _target_: mira.codec.CodecLoss
+  _convert_: all
+
+  weights:
+    _target_: mira.codec.CodecLossWeights
+    loss_mae: 1.0
+    loss_lpips_perceptual: 1.0
+    lpips_perceptual_frame_frac: 1.0
+    loss_dino_latent_consistency: 1.0
+    dino_latent_consistency_frame_frac: 1.0
+    compile_dino: ${run.compile}
+    auto_weight: true
+
+architecture:
+  _target_: kmira.codec.variants.learned_layer_mix.VideoCodecLearn7LayerMix
+  _convert_: all
+
+  config:
+    _target_: mira.codec.VideoCodecConfig
+    encoder:
+      latent_dim: 32
+      rae_model: dinov3_vitl16
+      aggregation_layers: [11, 13, 15, 17, 19, 21, 23]
+      bottleneck:
+        stride: 2
+        temporal_stride: 1
+        noise_tau: 0.0
+      compile_dino: ${run.compile}
+      video:
+        height: 288
+        width: 512
+        channels: 3
+        timesteps: 1
+        fps: 20
+
+    decoder:
+      latent_dim: ${..encoder.latent_dim}
+      activation_checkpointing: true
+      bottleneck:
+        stride: ${...encoder.bottleneck.stride}
+      vit_width: 768
+      vit_depth: 12
+      vit_num_heads: 12
+      mlp_dim_multiplier: 4
+      qk_norm: layernorm
+      patch_size: 16
+      patch_size_t: 1
+      video: ${..encoder.video}
