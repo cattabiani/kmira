@@ -1,0 +1,28 @@
+{
+  "_what": "mira's own DINO-layer ablation: aggregating 7 blocks (their baseline) vs reading only the final block.",
+  "_source_repo": "../mira/technical_report",
+  "_source_file": "sections/appendix.tex",
+  "_source_table": "tab:exp-enc-layers",
+  "_source_caption": "Layer aggregation. Aggregating seven DINOv3-L blocks (ours) against reading only the final block.",
+  "_transcribed_by_hand": true,
+  "_warning": "These are published numbers from a DIFFERENT setup (full video codec, fully trained, 8 GPUs). Absolute values are NOT comparable with kmira's, and the metric normalisations differ too -- mira reports P-DINO around 0.021 where kmira's eval_codec reports ~9.7e-05 for the same kind of quantity. Only the RELATIVE change between mira's own two rows is used, never an absolute value.",
+  "higher_is_better": {
+    "psnr": true, "ssim": true, "lpips": false, "p_dino": false,
+    "r_fid": false, "r_fvd": false, "r_fdd": false,
+    "g_fid": false, "g_fvd": false, "g_fdd": false
+  },
+  "rows": {
+    "multi_layer_mean": {
+      "_label": "Multi-layer mean (mira's baseline)",
+      "psnr": 29.7, "ssim": 0.891, "lpips": 0.051, "p_dino": 0.021,
+      "r_fid": 5.4, "r_fvd": 38.6, "r_fdd": 0.17,
+      "g_fid": 10.7, "g_fvd": 163.1, "g_fdd": 0.55
+    },
+    "last_block_only": {
+      "_label": "Last block only",
+      "psnr": 29.4, "ssim": 0.887, "lpips": 0.062, "p_dino": 0.024,
+      "r_fid": 7.8, "r_fvd": 55.0, "r_fdd": 0.25,
+      "g_fid": 12.2, "g_fvd": 172.4, "g_fdd": 0.62
+    }
+  }
+}

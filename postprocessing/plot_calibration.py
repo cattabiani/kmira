@@ -10,16 +10,16 @@ A−B says whether the benchmark can SEE a bottleneck-sized change. |A−C| says
 be before it means anything. The launcher demanded A−B > 3·|A−C| to call the setup usable, and it
 did not clear that. This figure is why the protocol for everything after looks the way it does.
 
-WHY THIS IS ONE PANEL AND NOT TWO. The obvious figure is loss falling beside PSNR rising on a
-shared step axis. That figure cannot be drawn: these runs set `checkpoint_keep_recent: 1`, so every
-intermediate checkpoint was deleted as they advanced and PSNR exists for A/B/C at exactly one step.
-Three points is not a curve, and a panel holding them earns nothing -- so the dB go in the legend,
-beside the arm they belong to. Recovering the real curve means re-running all three arms (~6h GPU)
-with checkpoints retained, or scoring inline. Transforming the loss into something that rises would
-look like PSNR without being it, so it is not done here.
+ONE PANEL, NOT TWO. What is plotted is mira's own validation loss (512 samples, parsed from the run
+logs), which is the per-step record these arms kept; each arm's final dB goes in the legend beside
+the arm it belongs to. These were the project's first runs and ran under the stock
+`checkpoint_keep_recent: 1`, so one checkpoint per arm survived and there is no dB curve to plot
+next to this one. Every run after them keeps its checkpoints and is scored densely, so this is the
+only figure in the folder without one. Transforming the loss into something that rises would look
+like PSNR without being it, so it is not done here.
 
-What is plotted is mira's own validation loss (512 samples, parsed from the run logs), which is the
-only per-step record these arms have and is what shows whether they had settled. They had not.
+The curves also settle the "had they converged?" question, and the answer is subtler than either
+yes or no -- see the settling block in the stats this returns.
 
 COLOUR FOLLOWS THE CONFIGURATION, not the run: A and C are the *same* configuration differing only
 in seed, so they share a hue and are separated by marker and label. Two blue curves landing far
@@ -32,6 +32,7 @@ import json
 
 import matplotlib.pyplot as plt
 from lib import (
+    ANNEAL_TAG,
     DATA,
     INK,
     INK_SOFT,
@@ -53,9 +54,85 @@ ARMS = [
 METRIC = "loss_total"
 
 
+def _slope_per_1k(readings) -> float:
+    """Least-squares slope of loss against step, scaled to loss-per-1000-steps."""
+    xs = [r["step"] for r in readings]
+    ys = [r[METRIC] for r in readings]
+    n = len(xs)
+    mx, my = sum(xs) / n, sum(ys) / n
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
+    den = sum((x - mx) ** 2 for x in xs)
+    return 1000 * num / den
+
+
+def settling_stats(curves, scored) -> str:
+    """Had these runs converged? The trailing slope says nearly, the wobble says you cannot tell,
+    and the plateau run says it would not have mattered either way.
+
+    RESULTS.md 0b quotes all three, so all three are computed here rather than eyeballed off the
+    figure. The trap this guards against is the one the project actually fell into twice: a flat
+    trailing curve is not evidence of convergence when the reading-to-reading spread is larger than
+    the trend it is supposed to reveal.
+    """
+    lines = [
+        "#### Had the calibration arms settled?\n",
+        "| arm | slope, first half | slope, last 5 readings | spread of last 6 | last reading |",
+        "|---|---|---|---|---|",
+    ]
+    for tag, label, _, _ in ARMS:
+        rd = curves[tag]["readings"]
+        half = len(rd) // 2
+        ys = [r[METRIC] for r in rd[-6:]]
+        lines.append(
+            f"| {label} | {_slope_per_1k(rd[:half]):+.4f} | {_slope_per_1k(rd[-5:]):+.4f} | "
+            f"{max(ys) - min(ys):.4f} | {rd[-1][METRIC]:.4f} |"
+        )
+    lines += [
+        "",
+        "Slopes are loss per 1,000 steps; negative is improving.\n",
+        (
+            "Each arm's trailing trend is roughly an order of magnitude shallower than its opening "
+            "one, so on the curve alone these look converged. But the residual slope over the last "
+            "five readings is smaller than the spread of the last six in every arm, so the trend is "
+            "inside the noise and the curve cannot tell you whether it has stopped. All three ticked "
+            "*up* at the final reading."
+        ),
+        "",
+    ]
+    pl = curves.get("plateau_baseline")
+    if pl:
+        rd = pl["readings"]
+        band = [r[METRIC] for r in rd if 9000 <= r["step"] <= 20000]
+        first, last = rd[0], rd[-1]
+        # How much of the run's whole descent was still ahead of it while it sat in that flat band?
+        remaining = max(band) - last[METRIC]
+        total = first[METRIC] - last[METRIC]
+        lines.append(
+            f"And flatness there would have meant nothing anyway. The same baseline configuration, "
+            f"run long, sits in the same flat band over steps 9k–20k of its own trace "
+            f"(loss {min(band):.4f}–{max(band):.4f}, spread {max(band) - min(band):.4f}) — and then "
+            f"runs to step {last['step']:,}, ending at {last[METRIC]:.4f}. Sitting in that band it "
+            f"still had {remaining:.4f} of loss to shed, **{remaining / total:.0%} of its entire "
+            f"descent** from {first[METRIC]:.4f}."
+        )
+        # The same point in PSNR, which is the metric the page is about. Both readings come from
+        # benchmark.jsonl so this sentence cannot drift from the scored record.
+        early = scored.get("plateau-16000")
+        final = scored.get(ANNEAL_TAG)
+        if early and final:
+            lines.append(
+                f"\nIn the metric the page is actually about, that band is "
+                f"{final['psnr'] - early['psnr']:.3f} dB short of where the run ends: "
+                f"{early['psnr']:.3f} dB at step 16,000 against {final['psnr']:.3f} at "
+                f"step {last['step']:,}.\n"
+            )
+    return "\n".join(lines)
+
+
 def build():
     scored = {r["tag"]: r for r in load_rows()}
-    curves = json.loads((DATA / "calibration_curves.json").read_text())["arms"]
+    meta = json.loads((DATA / "run_metadata.json").read_text())["runs"]
+    curves = meta
     target = json.loads((DATA / "mira_bottleneck_ablation.json").read_text())
     expected = target["calibration_target"]["expected_drop_db"]
 
@@ -68,11 +145,6 @@ def build():
     apply_style()
     fig, ax = plt.subplots(figsize=(9.2, 4.7))
 
-    # ONE panel, not two. There is no PSNR curve to put beside this one: `checkpoint_keep_recent: 1`
-    # deleted every intermediate checkpoint as these runs advanced, so PSNR exists for A/B/C at
-    # exactly one step and a panel holding three points earns nothing. The dB are folded into the
-    # legend instead, where they sit next to the identity they belong to. Faking a rising curve by
-    # transforming the loss would look like PSNR and not be it.
     for tag, label, color, marker in ARMS:
         rec = curves.get(tag)
         if not rec:
@@ -101,7 +173,10 @@ def build():
 
     ax.set_xlabel(f"training step  (each arm ran to {step:,})")
     ax.set_ylabel("validation loss, mira's own val loop\n(512 samples)  ↓ better")
-    ax.set_title("Three calibration runs: none had settled, and two of them are the same config", loc="left")
+    ax.set_title(
+        "Three calibration runs: two of them are the same config, and they land furthest apart",
+        loc="left",
+    )
     ax.set_xlim(-400, max(r["step"] for r in curves["A_baseline"]["readings"]) * 1.09)
     leg = ax.legend(loc="upper right", fontsize=8.5, title="arm   —   final PSNR, 2048 held-out frames")
     leg.get_title().set_fontsize(8)
@@ -186,6 +261,7 @@ def build():
         f"|A−C| = {abs(a_last - c_last):.4f} against B−A = {b_last - a_last:.4f}. "
         "Same conclusion as the PSNR comparison, reached independently.\n"
     )
+    stats.append(settling_stats(curves, scored))
     return fig, "\n".join(stats)
 
 

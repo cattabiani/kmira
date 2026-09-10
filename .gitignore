@@ -4,7 +4,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 checkpoints/
-data/
+# the dataset only; postprocessing/data/ is generated but IS committed, so the
+# figures rebuild on a fresh clone without a GPU. Anchored for that reason.
+/data/
 *.pth
 *.ckpt
 wandb/

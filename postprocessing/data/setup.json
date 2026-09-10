@@ -1,0 +1,61 @@
+{
+  "_source": "extract_setup_facts.py, from codec/configs/ and the constructed model",
+  "video": {
+    "height": 288,
+    "width": 512,
+    "channels": 3,
+    "timesteps": 1,
+    "fps": 20
+  },
+  "encoder": {
+    "rae_model": "dinov3_vitl16",
+    "aggregation_layers": [
+      11,
+      13,
+      15,
+      17,
+      19,
+      21,
+      23
+    ],
+    "latent_dim": 32,
+    "bottleneck_stride": 2,
+    "bottleneck_temporal_stride": 1
+  },
+  "decoder_base": {
+    "vit_width": 768,
+    "vit_depth": 12,
+    "vit_num_heads": 12
+  },
+  "decoder_xl": {
+    "vit_width": 1152,
+    "vit_depth": 28,
+    "vit_num_heads": 16,
+    "trainable_params": 596129440
+  },
+  "params": {
+    "total": 417342496,
+    "trainable": 114188320,
+    "frozen": 303154176,
+    "_note": "frozen is the DINOv3-L backbone; trainable is the bottleneck plus decoder"
+  },
+  "latent": {
+    "grid": [
+      9,
+      16
+    ],
+    "values_per_frame_pixels": 442368,
+    "values_per_frame_latent": 4608,
+    "reduction_x": 96.0,
+    "_note": "spatial only -- timesteps=1 and temporal_stride=1, so no temporal compression"
+  },
+  "optim": {
+    "lr": 0.0001,
+    "betas": [
+      0.9,
+      0.95
+    ],
+    "weight_decay": 0.1,
+    "min_lr": 1e-06
+  }
+}

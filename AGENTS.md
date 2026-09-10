@@ -141,9 +141,12 @@ same protocol. ~35 h of GPU for the plateau alone, which is why it sits behind t
   are bit-identical, but the second needs a mask, frozen buffers, and a correct argument about what
   AdamW's decoupled weight decay does to a held weight — an argument this repo got wrong once
   before it got it right. Machinery that is hard to reason about is evidence against itself.
-- `checkpoints/` and `data/` are gitignored and local-only, shared across every part of this
-  project (not nested under `codec/`). Don't expect them to be present after a fresh clone —
-  see `README.md`'s Setup section (gated downloads) and `codec/README.md` (training).
+- `checkpoints/` and the dataset `/data/` are gitignored and local-only, shared across every part
+  of this project (not nested under `codec/`). Don't expect them to be present after a fresh clone —
+  see `README.md`'s Setup section (gated downloads) and `codec/README.md` (training). Note the
+  dataset rule is *anchored* (`/data/`): `postprocessing/data/` is small generated JSON and IS
+  committed, because it is what lets the figures rebuild without a GPU. An unanchored `data/` rule
+  silently swallowed it once, which made the folder's "runs on a fresh clone" claim false.
 
 ## Gotchas that will bite you again if forgotten
 
@@ -214,7 +217,13 @@ any of these costs real time or a real bug, so they live here rather than only i
   plateau and warm-start launchers do. Disk is the trade: each checkpoint is ~4.4GB.
 - **Calling a plateau/elbow needs several trailing readings, not one flat stretch.** This project
   has hit real false plateaus more than once — a multi-hour flat stretch followed by a further jump
-  of over 1 dB. Stopping on the first flat reading has already cost real signal here.
+  of over 1 dB. Stopping on the first flat reading has already cost real signal here. The usable
+  test is a ratio, not an eye: compare the trailing trend against the reading-to-reading spread over
+  the same window. The calibration arms' trailing slope was ~10x shallower than their opening one
+  and would pass any visual flatness check, but it was *smaller than the spread of their last six
+  readings* — so the curve carried no information about whether the descent had stopped, and in fact
+  39% of the run's total loss descent (4.76 dB of PSNR) was still ahead of it. Flat is not
+  converged; flat plus a trend larger than the noise is.
 
 ## Setup, if you need to run anything
 

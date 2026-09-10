@@ -84,6 +84,22 @@ Final validation loss (mira's val loop, 512 samples — a different quantity fro
 
 In validation loss the seed gap is **larger** than the intervention: |A−C| = 0.1205 against B−A = 0.0952. Same conclusion as the PSNR comparison, reached independently.
 
+#### Had the calibration arms settled?
+
+| arm | slope, first half | slope, last 5 readings | spread of last 6 | last reading |
+|---|---|---|---|---|
+| A  baseline | -0.0723 | -0.0078 | 0.0370 | 0.6707 |
+| B  frozen bottleneck | -0.0629 | -0.0041 | 0.0387 | 0.7659 |
+| C  baseline, seed 2 | -0.0934 | -0.0059 | 0.0503 | 0.5502 |
+
+Slopes are loss per 1,000 steps; negative is improving.
+
+Each arm's trailing trend is roughly an order of magnitude shallower than its opening one, so on the curve alone these look converged. But the residual slope over the last five readings is smaller than the spread of the last six in every arm, so the trend is inside the noise and the curve cannot tell you whether it has stopped. All three ticked *up* at the final reading.
+
+And flatness there would have meant nothing anyway. The same baseline configuration, run long, sits in the same flat band over steps 9k–20k of its own trace (loss 0.6427–0.6988, spread 0.0561) — and then runs to step 304,000, ending at 0.2076. Sitting in that band it still had 0.4912 of loss to shed, **39% of its entire descent** from 1.4550.
+
+In the metric the page is actually about, that band is 4.762 dB short of where the run ends: 20.123 dB at step 16,000 against 24.885 at step 304,000.
+
 
 ---
 

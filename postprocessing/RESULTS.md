@@ -73,23 +73,13 @@ gap be before it means anything? Three runs of 15,299 steps — a baseline (**A*
 with the bottleneck frozen at a random projection (**B**, a published ≈1.4 dB effect), and the
 baseline again with a different seed (**C**, the noise floor).
 
-**Why there is no dB curve here.** The natural figure would be loss falling beside PSNR rising on
-a shared step axis. It cannot be drawn: these runs used `checkpoint_keep_recent: 1`, so every
-intermediate checkpoint was deleted as they advanced, and PSNR for A/B/C exists at exactly one
-step. So what is plotted is mira's own validation loss — the only per-step record these arms have —
-with each arm's single final dB reading folded into the legend beside the arm it belongs to.
-Recovering the real PSNR curve means re-running all three arms (≈5h of GPU) with checkpoints
-retained; scoring them afterwards is cheap (~25 min at `--n-frames 256`, which is valid for PSNR —
-only rFDD needs 2048). Neither the loss nor anything else on disk can be converted into it: PSNR
-needs MSE and L1 does not determine MSE, and transforming the loss into something that rises would
-look like PSNR without being it.
-
-**A tempting substitute that does not work.** The plateau run (0c) is the same baseline
-configuration, cold-started and scored from step 8,000, and its reading at 16,000 (20.123 dB) sits
-almost exactly on A's 20.105 at 15,299 — so it looks like a free third replicate of the baseline
-seed. It is not comparable. The calibration arms ran a full cosine decay to 1e-6 across their
-15,300 steps and therefore finished *annealed*, while the plateau run was mid-constant-LR at 1e-4.
-Different schedules at the same step; the near-agreement is a coincidence, not evidence.
+What is plotted is mira's own validation loss, the per-step record these three arms kept, with each
+arm's final dB reading in the legend beside the arm it belongs to. These were the first runs in the
+project and they ran under the stock `checkpoint_keep_recent: 1`, so one checkpoint per arm
+survived and the dB are endpoints rather than curves. Every run after this one keeps its
+checkpoints and is scored densely — the plateau baseline has 34 PSNR readings, each warm-start arm
+25 — so this is the only figure on the page without a dB curve, and both quantities agree here
+anyway.
 
 Colour follows the *configuration*, not the run: A and C are the same configuration, so they share
 a hue and differ by marker. Two blue curves landing far apart, with the orange intervention
@@ -104,10 +94,22 @@ a hue and differ by marker. Two blue curves landing far apart, with the orange i
 - **The validation curves say the same thing independently, and slightly worse.** In loss the seed
   gap is *larger* than the intervention: |A−C| = 0.1205 against B−A = 0.0952. Two runs of one
   configuration differ by more than freezing the bottleneck costs.
-- **None of the three had settled.** All were still descending at the last reading, with
-  reading-to-reading wobble big enough that all three ticked *up* at step 14,535. So the endpoint
-  the dB were scored at was not a converged one — part of why the comparison was noisy is simply
-  that 15,299 steps is early. The baseline later needed **272,000**.
+- **All three had flattened, and the flatness meant nothing.** Each arm's trailing trend is an
+  order of magnitude shallower than its opening one (A: −0.0078 loss per 1k steps over the last
+  five readings against −0.0723 over the first half), so on the curve alone these look settled. But
+  that residual slope is smaller than the reading-to-reading wobble in every arm — the last six
+  readings span 0.037–0.050 — so the curve cannot tell you whether the descent has stopped, and all
+  three ticked *up* at the final reading. What settles it is that the same baseline configuration,
+  run long, sits in the same flat band (loss 0.6427–0.6988 over its own steps 9k–20k) and then runs
+  to step **304,000**, ending at 0.2076: **39% of its entire descent** was still ahead of it, worth
+  **4.762 dB** of PSNR. Flat at 15,000 steps is not converged at 15,000 steps.
+
+**A tempting substitute that does not work.** The plateau run (0c) is the same baseline
+configuration, cold-started and scored from step 8,000, and its reading at 16,000 (20.123 dB) sits
+almost exactly on A's 20.105 at 15,299 — so it looks like a free third replicate of the baseline
+seed. It is not comparable. The calibration arms ran a full cosine decay to 1e-6 across their
+15,300 steps and therefore finished *annealed*, while the plateau run was mid-constant-LR at 1e-4.
+Different schedules at the same step; the near-agreement is a coincidence, not evidence.
 
 This is the most useful negative result in the project, and it is why the protocol looks the way it
 does. Unpaired comparisons at short run lengths are worthless here. Everything after this uses

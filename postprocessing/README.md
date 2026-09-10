@@ -53,11 +53,13 @@ pixi run python postprocessing/extract_setup_facts.py    # needs the DINOv3 weig
 step, so a figure drawn from stale weights is detectable rather than silent. **Re-run it after
 training more steps**, then `make_all.py`.
 
-`extract_calibration_curves.py` parses mira's validation-loss lines out of
-`checkpoints/calibration/*.log` into `data/calibration_curves.json`. It exists because
-`benchmark.jsonl` holds exactly one scored row per calibration arm — no intermediate checkpoints
-were ever scored for A/B/C — so the logs are their only per-step record. Note the output is
-validation *loss*, not PSNR, on a different sample set; the two never share an axis.
+`extract_run_metadata.py` parses every `checkpoints/calibration/*.log` into
+`data/run_metadata.json`: each run's validation readings, and the seed and LR schedule each hourly
+chunk actually resolved to. `benchmark.jsonl` records scored PSNR rows and nothing else, so the logs
+are the only record of both. It also *checks* the paired design — arms compared against each other
+must have drawn the same data at the same steps — rather than leaving it asserted in prose. The
+launch scripts call it themselves at session end, so this rarely needs running by hand. Note its
+readings are validation *loss*, not PSNR, on a different sample set; the two never share an axis.
 
 `extract_setup_facts.py` constructs the codec to count parameters (including the XL decoder, to
 size the configuration that OOMs a 12GB card) and derives the compression ratio from the config

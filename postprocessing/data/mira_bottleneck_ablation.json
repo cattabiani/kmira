@@ -1,0 +1,17 @@
+{
+  "_what": "mira's bottleneck ablation: a learned linear bottleneck against progressively simpler maps, feature extractor and decoder held fixed. The learned-vs-random-frozen gap is what kmira's A/B calibration was built to reproduce.",
+  "_source_repo": "../mira/technical_report",
+  "_source_file": "sections/6.experiments.tex",
+  "_source_table": "tab:exp-bottleneck",
+  "_transcribed_by_hand": true,
+  "_warning": "Published numbers from a different setup (full video codec, fully trained, 8 GPUs). Only the GAP between two of mira's own rows is used as a calibration target -- never an absolute value.",
+  "rows": {
+    "learned_convolution": { "_label": "Learned convolution (mira's default)", "psnr": 29.7, "ssim": 0.891, "lpips": 0.051 },
+    "random_frozen_projection": { "_label": "Random frozen projection", "psnr": 28.3, "ssim": 0.869, "lpips": 0.067 }
+  },
+  "calibration_target": {
+    "_what": "The effect kmira's arm B was configured to reproduce: freezing the bottleneck at a random projection.",
+    "metric": "psnr",
+    "expected_drop_db": 1.4
+  }
+}
