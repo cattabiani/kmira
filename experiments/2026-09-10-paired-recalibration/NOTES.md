@@ -62,10 +62,25 @@ target — a large effect from a tiny, unambiguous change.
 2. **The gap is in the neighbourhood of mira's 1.4 dB.** Not equal: different scale, image-only,
    Base decoder. *Falsified* if it comes out several times larger or smaller, which would say the
    reduced rig distorts the effect rather than shrinking with it.
-3. **The seed spread at convergence is much smaller than 1.142 dB.** The 1.142 was measured
-   undertrained, where runs differ most. *Falsified* if `abl_baseline` and `plateau_baseline` end
-   more than ~0.5 dB apart at a matched step, which would mean unpaired comparison is hopeless here
-   at any length and every future study must be paired.
+3. **The seed spread is usually small, with occasional large draws.** The 1.142 dB came from two
+   runs, which cannot estimate a spread at all. *Falsified* if `abl_baseline` and
+   `plateau_baseline` end more than ~0.5 dB apart at a matched step, which would mean unpaired
+   comparison is hopeless here at any length and every future study must be paired.
+
+   Early evidence for the "occasional large draw" shape, from the first chunk of `abl_baseline`
+   (2026-09-10): at comparable steps A (seed 28, cosine) sits at 0.7143 val loss, the baseline run
+   (seed 28, constant) at 0.7069 and `abl_baseline` (seed 1029, constant) at 0.7078 — while C (seed
+   1234, cosine) sits at 0.5782. Three cluster within 0.008 and C is 0.13 away, including a run
+   with a *different* seed landing with the pack. So the original |A−C| looks like one unusual draw
+   rather than a typical spread. Suggestive only: A and C ran cosine where the other two are
+   constant-LR.
+
+   Investigated and ruled out as causes of the A/C gap (2026-09-10), so this is not an artifact:
+   the two configs are identical apart from `seed` and `output_dir`; mira's validation loader is
+   hardcoded `seed=37`, so val losses are computed on the same data regardless of `run.seed`; the
+   dataset index predates every run and is unchanged; and the eval-sampling biases could only move
+   `eval_codec`'s PSNR, while mira's independent val loop shows the same gap. C separates from A
+   within 1,500 steps and holds it, which is an init-and-ordering effect from the start.
 
 ## Watch-outs
 

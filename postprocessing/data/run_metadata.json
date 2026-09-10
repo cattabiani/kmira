@@ -4946,6 +4946,15 @@
           "constant_steps": 87800,
           "decay_steps": 0,
           "min_lr": 1e-06
+        },
+        {
+          "seed": 39,
+          "steps": 96001,
+          "lr": 0.0001,
+          "warmup_steps": 200,
+          "constant_steps": 95800,
+          "decay_steps": 0,
+          "min_lr": 1e-06
         }
       ],
       "seeds_unique": [
@@ -4959,7 +4968,8 @@
         35,
         36,
         37,
-        38
+        38,
+        39
       ],
       "seed_schedule": [
         28,
@@ -4972,7 +4982,8 @@
         35,
         36,
         37,
-        38
+        38,
+        39
       ],
       "schedule": "constant",
       "readings": [
@@ -5598,6 +5609,62 @@
           "loss_lpips_perceptual": 0.1825,
           "loss_dino_latent_consistency": 0.0001,
           "loss_total": 0.247
+        },
+        {
+          "step": 89000,
+          "loss_mae": 0.0645,
+          "loss_lpips_perceptual": 0.1869,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2515
+        },
+        {
+          "step": 90000,
+          "loss_mae": 0.0682,
+          "loss_lpips_perceptual": 0.1941,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2625
+        },
+        {
+          "step": 91000,
+          "loss_mae": 0.0698,
+          "loss_lpips_perceptual": 0.207,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2769
+        },
+        {
+          "step": 92000,
+          "loss_mae": 0.0693,
+          "loss_lpips_perceptual": 0.2163,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2857
+        },
+        {
+          "step": 93000,
+          "loss_mae": 0.0691,
+          "loss_lpips_perceptual": 0.2099,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2791
+        },
+        {
+          "step": 94000,
+          "loss_mae": 0.0678,
+          "loss_lpips_perceptual": 0.2019,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2698
+        },
+        {
+          "step": 95000,
+          "loss_mae": 0.0703,
+          "loss_lpips_perceptual": 0.2068,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2772
+        },
+        {
+          "step": 96000,
+          "loss_mae": 0.0734,
+          "loss_lpips_perceptual": 0.2112,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2848
         }
       ]
     },
@@ -7339,7 +7406,8 @@
         35,
         36,
         37,
-        38
+        38,
+        39
       ],
       "identical_over_shared_range": true
     }
