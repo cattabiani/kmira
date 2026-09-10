@@ -35,6 +35,10 @@ smaller decoder, image-only, one dataset — so that what remained could be run 
 run at all. A result from an experiment that fits its resources beats a bigger experiment that
 does not.
 
+Every score on this page post-dates the eval and sampling fixes that made it trustworthy; those
+are in [`../CHANGELOG.md`](../CHANGELOG.md) and the gotcha list in
+[`../AGENTS.md`](../AGENTS.md) rather than here.
+
 ### 0a. A deliberately smaller codec, scoped to one consumer GPU
 
 mira's codec is a frozen DINOv3-L/16 feature extractor → a learned linear bottleneck → a ViT
@@ -146,6 +150,12 @@ reasonable eye would call a plateau, and then it gained **+0.18 dB** at 176,000.
 point would have locked in a baseline over a dB short, and every experiment since would have been
 measured against it.
 
+**Why the anneal is a separate phase, and which number to compare against.** The +0.138 dB the
+anneal buys is a property of the *low learning rate*, not of a better region of parameter space. A
+warm start resets the optimiser and raises the LR again, handing that gain straight back. So a
+constant-LR warm-started arm is read against the **24.747 plateau**, never the annealed 24.885 —
+which is why both lines appear on every trajectory figure below.
+
 Both of those turned out to have a cause, which is the next section.
 
 ### 0d. Neither "false plateau" was a plateau — both were the data schedule
@@ -187,32 +197,6 @@ and breaking free, they were four poor data slices followed by a good one, twice
 One stretch is *not* evidence about data: the warm-start arms' first three chunks (seeds 29–31)
 fall and rebound because a warm start resets the optimiser and raises the LR. The plateau run never
 used those seeds, so there is no cross-run check, and the figure marks them separately.
-
-**Why the anneal is a separate phase, and which number to compare against.** The +0.138 dB the
-anneal buys is a property of the *low learning rate*, not of a better region of parameter space. A
-warm start resets the optimiser and raises the LR again, handing that gain straight back. So a
-constant-LR warm-started arm is read against the **24.747 plateau**, never the annealed 24.885 —
-which is why both lines appear on every trajectory figure below.
-
-### 0e. Supporting work with no figure
-
-Recorded here for completeness because the results lean on it, but it produced fixes rather than
-plottable data. Full detail in [`../CHANGELOG.md`](../CHANGELOG.md) and
-[`../AGENTS.md`](../AGENTS.md).
-
-- **A `[-1, 1]` vs `[0, 1]` pixel-range bug**, caught by scoring a flat gray image and finding it
-  beat the real reconstructions. It silently zeroed every negative pixel. This is why the first
-  thing the benchmark does with any new metric is check it against a trivial baseline.
-- **Three hidden biases in eval sampling**, all found by measurement rather than inspection: the
-  streaming loader stuck on 3 of 17 matches, unequal per-match weighting, and `max_clips` only ever
-  sampling the opening minutes of each match. Every score on this page post-dates those fixes.
-- **A data-repetition bug**: mira's train loader reseeds from `run.seed` on every process start and
-  is not checkpointed, so chunked hourly training with a fixed seed replayed the identical stream
-  every restart. It invalidated 56,000 steps of coverage before it was found. The per-chunk seed
-  schedule that fixes it is also what makes the paired arms share data exactly.
-- **No forked trainer.** Every divergence from mira is Hydra config or a small standalone patch
-  module, so the baseline is a faithful reproduction of mira's own training path and not of a
-  modified one.
 
 ---
 

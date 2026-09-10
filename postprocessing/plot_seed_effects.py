@@ -256,9 +256,9 @@ def stats_for(deltas: dict[str, dict[int, float]]) -> str:
         lines.append(f"- **seeds {lo}–{hi}**: " + ", ".join(poor_note) + " dB.")
         poor_note = []
     lines.append(
-        "\nThe plateau run spent its first seven chunks (steps 0–56,000) on seed 28, which is the "
-        "data-repetition bug in `0e` visible in the metadata: the same slice replayed seven times. "
-        "Fresh per-chunk seeds begin at its step 64,000.\n"
+        "\nThe plateau run spent its first seven chunks (steps 0–56,000) on seed 28 — the same "
+        "slice replayed seven times, before the per-chunk seed schedule existed. Fresh seeds begin "
+        "at its step 64,000, which is why it has no reading for seeds 29–35.\n"
     )
     return "\n".join(lines)
 

@@ -207,7 +207,7 @@ PSNR gained during the chunk trained with each seed. A chunk's seed picks its en
 - **seeds 36–39**: plateau baseline +0.092..+0.157, control -0.396..-0.080, learn7 -0.279..-0.079, learned_mix -0.137..+0.066 dB.
 - **seeds 47–49**: plateau baseline +0.011..+0.024, control -0.024..-0.006, learned_mix +0.006..+0.049 dB.
 
-The plateau run spent its first seven chunks (steps 0–56,000) on seed 28, which is the data-repetition bug in `0e` visible in the metadata: the same slice replayed seven times. Fresh per-chunk seeds begin at its step 64,000.
+The plateau run spent its first seven chunks (steps 0–56,000) on seed 28 — the same slice replayed seven times, before the per-chunk seed schedule existed. Fresh seeds begin at its step 64,000, which is why it has no reading for seeds 29–35.
 
 
 ---
