@@ -12,6 +12,12 @@ checkpoint. That file is the record but it is not readable — this page is the 
 pixi run python postprocessing/make_all.py
 ```
 
+**`learn7` is still training**, so its numbers move between sessions. Anything about the frontier of
+a running arm is therefore stated qualitatively here and quantitatively in
+[`stats.md`](stats.md), whose header carries the date it was generated. Prose that hardcoded "at
+64k, freedom is 20%" went stale twice inside a single afternoon; prose that says "freedom has
+stopped growing while reach has not" stays true and points at the table for the number.
+
 The page runs in dependency order: **the foundation** (how the benchmarked codec was built,
 calibrated and trained — everything else is a comparison against its output), then results split
 into **established** (paired, matched-step, complete) and **provisional** (arms still running, or
@@ -195,8 +201,11 @@ The right panel splits it, which needs all three arms scored at the same step:
 - **freedom** = `learn7 − control`: the weights are allowed to move, over mira's own 7 blocks
 - **reach** = `learned_mix − learn7`: the other 17, mostly shallower, blocks become available
 
-At 64k, freedom is **+0.367 dB — 20% of the gap**, down from 57% at 8k. See the provisional section
-below: `learn7` is only scored to 64,000 steps.
+Freedom's **share of the gap falls at every single reading** — it starts as the majority of a very
+small gap and is a minority of a large one by the time `learn7`'s frontier is reached. More
+telling, freedom in absolute dB has now flattened while reach keeps climbing. The current values
+are in [`stats.md`](stats.md)'s decomposition table; `learn7` is mid-run, so see the provisional
+section below before quoting them.
 
 ### 3. The metrics disagree, and P-DINO does not separate the arms at all
 
@@ -227,7 +236,7 @@ This is the mechanism, and it is the most legible result here.
 | arm | can read | largest block | share |
 |---|---|---|---|
 | `control` | all 24, weights frozen | **L23** — the deepest | 57.1% |
-| `learn7` | blocks 11–23 only | **L11** — shallowest it can reach | 76.6% |
+| `learn7` | blocks 11–23 only | **L11** — shallowest it can reach | 82.1% *(still moving)* |
 | `learned_mix` | all 24 | **L0** — shallowest of all | 45.7% |
 
 The top panel *is* mira's stock formula, drawn: the mean over seven blocks plus a residual on the
@@ -270,15 +279,24 @@ looks like.
 
 Real measurements, but not yet quotable as results.
 
-### `learn7` is only a third of the way
+### `learn7` is still running, and its numbers move
 
-It is scored to 64,000 steps against the other arms' 200,000. The freedom/reach split above is
-therefore provisional in both directions: `learned_mix` had banked only +1.797 dB of its eventual
-+2.914 dB at 64k — under two-thirds — so this is the part of the curve that turned out least
-representative. The shared 72k–96k dip is also immediately ahead of where `learn7` currently sits.
+It is being trained toward the other arms' 200,000 steps and is not there yet, so **every number
+involving `learn7` on this page is a snapshot** — check `stats.md`'s generation date. Two reasons
+the split is provisional in both directions:
 
-Directionally the pre-registered hypothesis is holding (freedom's share falls at every reading),
-but the number to report is the split at a matched 200k, and that does not exist yet.
+- `learned_mix` had banked well under two-thirds of its eventual +2.914 dB by the point `learn7`
+  has reached, so this is the stretch of the curve that turned out least representative of the
+  final answer.
+- The shared 72k–96k dip sits right where `learn7` currently is, and both other arms lost ground
+  through it before jumping at 104k. Reading `learn7` mid-dip would understate it.
+
+Directionally the pre-registered hypothesis is holding: freedom's share of the gap falls at every
+reading, and freedom in absolute dB has now stopped growing while reach has not. But the number to
+report is the split at a matched 200,000, and that does not exist yet.
+
+Its weight share is moving too — L11's share has climbed with every extraction, so the figure in
+section 4 is a snapshot of a still-concentrating distribution, not a settled one.
 
 ### Nothing here tests the world model
 

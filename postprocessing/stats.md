@@ -32,6 +32,32 @@ Source: `data/setup.json`, written by `extract_setup_facts.py` from `codec/confi
 
 ---
 
+<!-- from make_all.py -->
+
+### Training runs, from their logs
+
+Captured by `extract_run_metadata.py`. `benchmark.jsonl` holds the scored PSNR rows; this holds the per-step validation readings and the schedule/seed each chunk actually used, which the logs are the only record of.
+
+| run | val readings | scored PSNR rows | chunks | seeds | LR schedule |
+|---|---|---|---|---|---|
+| `A_baseline` | 20 | 1 | 1 | 28–28 (1) | cosine |
+| `B_frozen_bneck` | 20 | 1 | 1 | 28–28 (1) | cosine |
+| `C_baseline_seed2` | 20 | 1 | 1 | 1234–1234 (1) | cosine |
+| `plateau_baseline` | 305 | 34 | 44 | 28–66 (32) | mixed (40 constant, 4 cosine) |
+| `warmstart_control` | 201 | 25 | 29 | 28–52 (25) | constant |
+| `warmstart_learn7` | 84 | 10 | 11 | 28–38 (11) | constant |
+| `warmstart_learned_mix` | 201 | 25 | 25 | 28–52 (25) | constant |
+
+**Paired-design check.** Arms compared against each other must have drawn the same data at the same steps. Seeds are derived as `SEED_BASE + step/CHUNK`, so a seed identifies a slice of the stream:
+
+- `warmstart_control vs warmstart_learned_mix`: 25 shared seeds, identical over the shared range: **True**
+- `warmstart_control vs warmstart_learn7`: 11 shared seeds, identical over the shared range: **True**
+
+Note `plateau_baseline` reads as mixed because `run_anneal.sh` continues into the plateau run's own output directory, so that log holds both the constant-LR chunks and the cosine ones.
+
+
+---
+
 <!-- from plot_calibration.py -->
 
 ### Three-arm calibration, 15,299 steps per arm
@@ -261,11 +287,11 @@ mira's numbers are transcribed from `sections/appendix.tex`, table `tab:exp-enc-
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | share % | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 7.1 | 0.0 | 7.1 | 0.0 | 7.1 | 0.0 | 7.1 | 0.0 | 7.1 | 0.0 | 7.1 | 0.0 | 57.1 |
 
-**learn7** @ step 64,000 (`checkpoints/calibration/warmstart_learn7/checkpoint-64000/checkpoint.pth`) — largest block L11 at 76.6%; 0.0% of mass on the 17 non-stock blocks, 100.0% on mira's 7. Raw vector L2 0.0564, from an init of 1.1952 (unidentified scale — compare shares, not magnitudes).
+**learn7** @ step 80,000 (`checkpoints/calibration/warmstart_learn7/checkpoint-80000/checkpoint.pth`) — largest block L11 at 82.1%; 0.0% of mass on the 17 non-stock blocks, 100.0% on mira's 7. Raw vector L2 0.0337, from an init of 1.1952 (unidentified scale — compare shares, not magnitudes).
 
 | block | L11 | L13 | L15 | L17 | L19 | L21 | L23 |
 |---|---|---|---|---|---|---|---|
-| share % | 76.6 | 2.2 | 3.0 | 1.2 | 2.1 | 1.7 | 13.1 |
+| share % | 82.1 | 1.9 | 2.7 | 1.0 | 2.0 | 1.4 | 8.8 |
 
 **learned_mix** @ step 200,000 (`checkpoints/calibration/warmstart_learned_mix/checkpoint-200000/checkpoint.pth`) — largest block L0 at 45.7%; 92.4% of mass on the 17 non-stock blocks, 7.6% on mira's 7. Raw vector L2 0.0127, from an init of 1.1952 (unidentified scale — compare shares, not magnitudes).
 

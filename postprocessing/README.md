@@ -25,7 +25,7 @@ generated from the record, regenerable in one command.
 | `plot_*.py` | one figure each; standalone-runnable |
 | `extract_layer_weights.py` | extraction: layer weights out of the arms' checkpoints |
 | `extract_setup_facts.py` | extraction: the codec's shape and parameter counts |
-| `extract_calibration_curves.py` | extraction: validation curves out of the calibration logs |
+| `extract_run_metadata.py` | extraction: every run's val curves, seeds and LR schedule from its log |
 | `data/*.json` | small committed inputs that are not in `benchmark.jsonl` |
 | `figures/*.png` | committed, so `RESULTS.md` renders without running anything |
 
@@ -42,9 +42,9 @@ committed.
 **The two exceptions** are the extraction scripts, which need things the repo does not ship:
 
 ```bash
-pixi run python postprocessing/extract_layer_weights.py      # needs local checkpoints
-pixi run python postprocessing/extract_calibration_curves.py # needs local training logs
-pixi run python postprocessing/extract_setup_facts.py        # needs the DINOv3 weights
+pixi run python postprocessing/extract_layer_weights.py   # needs local checkpoints
+pixi run python postprocessing/extract_run_metadata.py   # needs local training logs
+pixi run python postprocessing/extract_setup_facts.py    # needs the DINOv3 weights
 ```
 
 `extract_layer_weights.py` reads `encoder.layer_weights` out of the arms' `.pth` files —
@@ -91,3 +91,6 @@ Worth stating, because the point of the folder is that its numbers can be truste
   visible direct label and `stats.md` exists as a table view.
 - **Light surface, explicitly painted.** These render on pages that may be dark, so the figures
   never use a transparent background.
+- **Prose never hardcodes a running arm's frontier.** A number like "at 64k, freedom is 20% of the
+  gap" is wrong by the next session. Claims about an in-progress arm are qualitative here and
+  quantitative in `stats.md`, whose header carries its generation date.

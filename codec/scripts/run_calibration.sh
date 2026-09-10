@@ -9,6 +9,10 @@
 #   B  frozen random bottleneck  a known -1.4 dB effect (paper Table 4) -- the calibration
 #   C  baseline, different seed  the NOISE FLOOR: any gap smaller than |A-C| is luck, not signal
 #
+# Each arm is scored at EVERY checkpoint (10% apart) and not only at the end, so the arms get a PSNR
+# trajectory rather than a single point. The original run of this script did not, and that reading
+# is unrecoverable -- see the note above the scoring loop below.
+#
 # Ordered so the headline (A vs B) lands first; if you stop early you still have the effect size.
 # Runs FOREGROUND on purpose -- no nohup/disown, so it lives only as long as this terminal and
 # leaves nothing orphaned. Leave the terminal open. Each run resumes from its own last checkpoint
@@ -58,6 +62,7 @@ run_arm () {
     run.batch_size=4 \
     run.compile=false \
     run.checkpoint_every=10% \
+    run.checkpoint_keep_recent=11 \
     validation.val_every=5% \
     validation.val_n_samples=512 \
     optim.scheduler.warmup_steps=$WARMUP \
@@ -65,13 +70,58 @@ run_arm () {
     wandb.mode=disabled \
     2>&1 | tee "checkpoints/calibration/${name}.log"
 
-  # Score the final checkpoint with the paper-comparable metrics.
-  local ckpt
+  # Score EVERY checkpoint, not just the final one, then keep only the final.
+  #
+  # The first version of this script scored once at the end, and the cost of that is permanent: the
+  # three original calibration arms have exactly one PSNR reading each, `checkpoint_keep_recent`
+  # defaulted to 1 so the intermediate weights were deleted as training advanced, and no curve can
+  # ever be recovered for them (validation loss cannot be converted to PSNR -- PSNR needs MSE and
+  # L1 does not determine it). See postprocessing/RESULTS.md section 0b.
+  #
+  # Why keep-then-score rather than chunk-and-score-inline the way run_plateau.sh and
+  # run_learned_layer_mix_warmstart.sh do: those runs hold a CONSTANT learning rate, so stopping
+  # and resuming them is safe. This one runs a full cosine decay across its own length, and
+  # resuming a cosine schedule is exactly where this project has already been bitten (see
+  # src/kmira/lr_resume_override.py and run_anneal.sh's notes). Keeping 11 checkpoints through one
+  # uninterrupted process costs ~48GB per arm transiently and risks nothing.
+  local scored=0 ckpt step
+  for dir in $(ls -d "$out"/checkpoint-*/ | sort -V); do
+    step="$(basename "$dir" | sed 's#checkpoint-##')"
+    ckpt="${dir}checkpoint.pth"
+    [ -f "$ckpt" ] || continue
+    if grep -q "\"tag\": \"${name}-${step}\"" codec/results/benchmark.jsonl 2>/dev/null; then
+      echo "--- step $step already scored, skipping"
+      continue
+    fi
+    echo "--- scoring $name step $step ---"
+    # --n-frames 256 for the trajectory: PSNR/SSIM/LPIPS are stable there and it takes ~45s instead
+    # of ~6min. rFDD is NOT valid at that size (it fits a 768x768 covariance and is rank-deficient
+    # below ~2048 frames), so the final checkpoint is rescored at full size below and that is the
+    # only row whose rFDD should ever be read.
+    "$PIXI" run python -m kmira.benchmark.eval_codec \
+      --checkpoint "$ckpt" --n-frames 256 --tag "${name}-${step}" \
+      2>&1 | tail -4
+    scored=$((scored + 1))
+  done
+  echo "--- scored $scored checkpoints for $name ---"
+
+  # The headline row: final checkpoint, full 2048 frames, tagged without a step so it stays
+  # comparable with the original calibration rows.
   ckpt="$(ls -d "$out"/checkpoint-*/ | sort -V | tail -1)checkpoint.pth"
-  echo "--- scoring $ckpt ---"
+  echo "--- scoring $name final at full size ---"
   "$PIXI" run python -m kmira.benchmark.eval_codec \
     --checkpoint "$ckpt" --n-frames 2048 --tag "$name" \
     2>&1 | tail -12
+
+  # Reclaim the disk now that the numbers are safe. The metrics are a few hundred bytes per
+  # checkpoint in benchmark.jsonl; the weights are 4.4GB each and nothing later needs them.
+  local keep
+  keep="$(ls -d "$out"/checkpoint-*/ | sort -V | tail -1)"
+  for dir in $(ls -d "$out"/checkpoint-*/ | sort -V); do
+    [ "$dir" = "$keep" ] && continue
+    echo "--- removing scored $dir"
+    rm -rf "$dir"
+  done
 }
 
 START=$(date +%s)
@@ -86,6 +136,14 @@ echo "=================================================================="
 echo " done in $(( ($(date +%s) - START) / 60 )) min"
 echo "=================================================================="
 echo ""
+
+# Persist this session's metadata while the log still exists. checkpoints/ is gitignored and the
+# logs are the only per-step record of validation loss, the resolved LR schedule and the per-chunk
+# seed -- ~10x the resolution of the scored PSNR rows, and unrecoverable once the log is gone.
+# Writes a few hundred kB of committed JSON under postprocessing/data/.
+"$PIXI" run python postprocessing/extract_run_metadata.py || \
+  echo "WARN: metadata capture failed; the log is still on disk, re-run the extractor by hand" >&2
+
 echo "Results table:"
 "$PIXI" run python -c "
 import json, pathlib

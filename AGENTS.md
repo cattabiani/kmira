@@ -197,6 +197,15 @@ any of these costs real time or a real bug, so they live here rather than only i
   holds 1e-4. Their readings are therefore NOT comparable at equal step counts, however tempting it
   is — A_baseline's 20.105 at 15,299 and the plateau run's 20.123 at 16,000 look like a seed
   replicate of the same configuration and are not one.
+- **Score every checkpoint inline, and capture the log's metadata before the log is gone.** Every
+  launcher except the original `run_calibration.sh` chunks hourly and scores each checkpoint, which
+  is why the plateau and warm-start arms have 25-34 PSNR readings and the calibration arms have
+  one. `run_calibration.sh` now keeps its checkpoints through the run, scores them all, then
+  deletes them (keep-then-score rather than chunk-and-score, because it runs a cosine schedule and
+  resuming one of those is its own hazard). Separately, the logs hold ~10x the resolution of the
+  scored rows plus each chunk's resolved seed and LR schedule, and `checkpoints/` is gitignored --
+  so the launchers now call `postprocessing/extract_run_metadata.py` at the end of a session to
+  persist it. A few hundred kB of committed JSON against data that is otherwise unrecoverable.
 - **`checkpoint_keep_recent` decides whether a run's trajectory can EVER be scored.** It defaults
   to 1 in `codec/configs/kmira_train_codec.yaml`, so intermediate checkpoints are deleted as
   training advances and a run scored only at the end can never be given a curve afterwards — the

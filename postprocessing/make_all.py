@@ -85,10 +85,67 @@ def setup_table() -> str:
     )
 
 
+def run_metadata_table() -> str:
+    """What each run actually did, from the logs. Stats-only, no figure.
+
+    Includes the paired design's central claim as a CHECK rather than an assertion: two arms
+    compared against each other must have drawn the same data at the same steps.
+    """
+    blob = json.loads((HERE / "data" / "run_metadata.json").read_text())
+    lines = [
+        "### Training runs, from their logs\n",
+        (
+            "Captured by `extract_run_metadata.py`. `benchmark.jsonl` holds the scored PSNR rows; this "
+            "holds the per-step validation readings and the schedule/seed each chunk actually used, "
+            "which the logs are the only record of.\n"
+        ),
+        "| run | val readings | scored PSNR rows | chunks | seeds | LR schedule |",
+        "|---|---|---|---|---|---|",
+    ]
+    import lib  # local import: lib pulls in matplotlib, only needed when this runs
+
+    rows = lib.load_rows()
+    for name, rec in blob["runs"].items():
+        prefix = {
+            "plateau_baseline": "plateau",
+            "warmstart_control": "control",
+            "warmstart_learn7": "learn7",
+            "warmstart_learned_mix": "learned_mix",
+        }.get(name)
+        n_psnr = len(lib.series(rows, prefix)) if prefix else sum(1 for r in rows if r["tag"] == name)
+        seeds = rec["seeds_unique"]
+        span = f"{seeds[0]}–{seeds[-1]} ({len(seeds)})" if seeds else "—"
+        lines.append(
+            f"| `{name}` | {len(rec['readings'])} | {n_psnr} | {len(rec['chunks'])} | "
+            f"{span} | {rec['schedule']} |"
+        )
+    lines.append("")
+    lines.append(
+        "**Paired-design check.** Arms compared against each other must have drawn the "
+        "same data at the same steps. Seeds are derived as `SEED_BASE + step/CHUNK`, so a "
+        "seed identifies a slice of the stream:\n"
+    )
+    for pair, rec in blob.get("pairing", {}).items():
+        lines.append(
+            f"- `{pair}`: {len(rec['shared_seeds'])} shared seeds, identical over the shared "
+            f"range: **{rec['identical_over_shared_range']}**"
+        )
+    lines.append("")
+    lines.append(
+        "Note `plateau_baseline` reads as mixed because `run_anneal.sh` continues into "
+        "the plateau run's own output directory, so that log holds both the constant-LR "
+        "chunks and the cosine ones.\n"
+    )
+    return "\n".join(lines)
+
+
 def main() -> None:
     from lib import save
 
-    sections: list[str] = [f"<!-- from make_all.py -->\n\n{setup_table()}"]
+    sections: list[str] = [
+        f"<!-- from make_all.py -->\n\n{setup_table()}",
+        f"<!-- from make_all.py -->\n\n{run_metadata_table()}",
+    ]
     for module_name, basename in FIGURES:
         module = importlib.import_module(module_name)
         fig, stats = module.build()

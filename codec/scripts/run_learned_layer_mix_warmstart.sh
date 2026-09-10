@@ -246,3 +246,11 @@ echo " done in $(( ($(date +%s) - START) / 60 )) min"
 echo "=================================================================="
 LEARNED_CKPT_DIR="$PWD/checkpoints/calibration/warmstart_learned_mix"
 ARMS="$ARMS" LEARNED_CKPT_DIR="$LEARNED_CKPT_DIR" "$PIXI" run python codec/scripts/report_layer_mix.py
+
+# Persist this session's metadata while the log still exists. checkpoints/ is gitignored and the
+# logs are the only per-step record of validation loss, the resolved LR schedule and the per-chunk
+# seed -- ~10x the resolution of the scored PSNR rows, and unrecoverable once the log is gone.
+# Writes a few hundred kB of committed JSON under postprocessing/data/.
+"$PIXI" run python postprocessing/extract_run_metadata.py || \
+  echo "WARN: metadata capture failed; the log is still on disk, re-run the extractor by hand" >&2
+
