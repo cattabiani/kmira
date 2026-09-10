@@ -5563,6 +5563,41 @@
           "loss_lpips_perceptual": 0.1795,
           "loss_dino_latent_consistency": 0.0001,
           "loss_total": 0.2422
+        },
+        {
+          "step": 84000,
+          "loss_mae": 0.0612,
+          "loss_lpips_perceptual": 0.1829,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2442
+        },
+        {
+          "step": 85000,
+          "loss_mae": 0.0611,
+          "loss_lpips_perceptual": 0.1772,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2384
+        },
+        {
+          "step": 86000,
+          "loss_mae": 0.0608,
+          "loss_lpips_perceptual": 0.1758,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2367
+        },
+        {
+          "step": 87000,
+          "loss_mae": 0.0617,
+          "loss_lpips_perceptual": 0.1778,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2396
+        },
+        {
+          "step": 88000,
+          "loss_mae": 0.0644,
+          "loss_lpips_perceptual": 0.1825,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.247
         }
       ]
     },

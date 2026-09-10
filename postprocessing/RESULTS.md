@@ -28,10 +28,14 @@ interpretation rather than measurement). That split is the point of the page.
 ## The foundation
 
 Everything below this section is a *comparison against a fixed point*. This part is how that fixed
-point was built and why it can be trusted — it is the load-bearing work, and none of the
-experiment results mean anything without it.
+point was built and why it can be trusted.
 
-### 0a. A deliberately smaller codec, so it could be trained near its own ceiling
+The constraint behind every choice here is one 12GB consumer GPU. The scope was cut to match it —
+smaller decoder, image-only, one dataset — so that what remained could be run properly rather than
+run at all. A result from an experiment that fits its resources beats a bigger experiment that
+does not.
+
+### 0a. A deliberately smaller codec, scoped to one consumer GPU
 
 mira's codec is a frozen DINOv3-L/16 feature extractor → a learned linear bottleneck → a ViT
 decoder. This rig keeps that structure exactly and shrinks the parts that make it unaffordable on
@@ -50,18 +54,24 @@ one consumer GPU (RTX 4070 Ti, 12GB):
 | compression | 442,368 → 4,608 values per frame = **96×**, spatial only |
 | optimiser | AdamW, lr 1e-4, betas [0.9, 0.95], weight decay 0.1 |
 
-Two choices here matter for reading anything downstream.
+Everything shrunk here was shrunk to fit the scope to one consumer GPU. Two of those choices
+change how the results downstream should be read.
 
-**The Base decoder, not mira's XL.** The XL configuration comes to **596,129,440 trainable
-parameters** against Base's 114,188,320, and OOMs on 12GB under fp32 Adam.
-The first response was to fork mira's trainer to force bf16; the actual fix was to use mira's own
-smaller Base config, which deleted the fork — training now runs `mira/scripts/train_codec.py`
-completely unmodified, config-only. The better reason to prefer Base emerged afterwards: it is the
-only size cheap enough to train *near its own convergence ceiling*, and comparing two
-near-converged variants is a different and much sounder thing than comparing two undertrained ones.
+**The Base decoder, not mira's XL.** Three reasons, in the order they mattered:
+
+- **XL does not fit.** 596,129,440 trainable parameters against Base's 114,188,320; it OOMs on
+  12GB under fp32 Adam.
+- **Base is trainable to its elbow.** 272,000 steps, ~35h. XL at 5× the parameters would not have
+  been, and a gap measured between two undertrained arms tells you which trains faster, not which
+  is better.
+- **The paper says Base is a reasonable codec.** It reaches 27.6 dB there, so this is a smaller
+  configuration of mira's, not a degraded one.
+
+Both are mira's own configs, so this is a config change and not a fork — training runs
+`mira/scripts/train_codec.py` unmodified.
 
 **Image-only.** `timesteps: 1` and no temporal stride, so the 96× compression here is purely
-spatial where mira's 192× includes a 2× temporal reduction. This is the single biggest reason no
+spatial where mira's 192× includes a 2× temporal reduction. This is the biggest single reason no
 absolute number on this page is comparable with the paper's.
 
 ### 0b. The benchmark was calibrated before it was trusted — and it failed its own test

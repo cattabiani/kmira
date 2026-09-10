@@ -45,7 +45,7 @@ Captured by `extract_run_metadata.py`. `benchmark.jsonl` holds the scored PSNR r
 | `C_baseline_seed2` | 20 | 1 | 1 | 1234–1234 (1) | cosine |
 | `plateau_baseline` | 305 | 34 | 44 | 28–66 (32) | mixed (40 constant, 4 cosine) |
 | `warmstart_control` | 201 | 25 | 29 | 28–52 (25) | constant |
-| `warmstart_learn7` | 84 | 10 | 11 | 28–38 (11) | constant |
+| `warmstart_learn7` | 89 | 11 | 11 | 28–38 (11) | constant |
 | `warmstart_learned_mix` | 201 | 25 | 25 | 28–52 (25) | constant |
 
 **Paired-design check.** Arms compared against each other must have drawn the same data at the same steps. Seeds are derived as `SEED_BASE + step/CHUNK`, so a seed identifies a slice of the stream:
@@ -174,7 +174,7 @@ In the metric the page is actually about, that band is 4.762 dB short of where t
 | 64000 | 24.729 | 25.097 | 26.526 |
 | 72000 | 24.649 | 25.018 | 26.592 |
 | 80000 | 24.472 | 24.828 | 26.506 |
-| 88000 | 24.170 | — | 26.369 |
+| 88000 | 24.170 | 24.549 | 26.369 |
 | 96000 | 23.774 | — | 26.260 |
 | 104000 | 24.570 | — | 26.898 |
 | 112000 | 24.701 | — | 27.125 |
@@ -211,6 +211,7 @@ Baselines: constant-LR plateau 24.747 dB (`plateau-272000`), annealed 24.885 dB 
 | 64000 | +0.367 | +1.430 | +1.797 | 20% |
 | 72000 | +0.369 | +1.575 | +1.943 | 19% |
 | 80000 | +0.356 | +1.678 | +2.034 | 17% |
+| 88000 | +0.379 | +1.820 | +2.199 | 17% |
 
 ### Total gap, learned_mix − control, at every matched step
 

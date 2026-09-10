@@ -32,6 +32,13 @@ have (mira trains 250k+ steps on 8 GPUs; this runs on one consumer 4070 Ti). The
 benchmark that reliably answers *"is this change to the codec better than mira's stock one?"* at a
 much smaller, single-GPU scale, using paired A/B comparisons against a locked baseline checkpoint.
 
+**Scope the experiment to the resources, not the ambition.** Every reduction here — the Base
+decoder instead of XL, image-only instead of temporal, one dataset — exists so that what remains
+can be run *properly*: to its elbow, paired, and long enough that the gap is not a difference in
+training speed. A smaller experiment carried to completion answers a question; a bigger one stopped
+early answers none. When a proposal does not fit the GPU, cut the scope before cutting the
+protocol.
+
 ## Where things stand (as of the last commit)
 
 - A calibrated, plateaued, annealed **baseline codec** is locked at
