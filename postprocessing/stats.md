@@ -70,8 +70,9 @@ Final scored PSNR, `eval_codec` on 2048 held-out frames:
 | B  frozen bottleneck | `B_frozen_bneck` | 18.6560 | 0.5565 | 0.4861 | 9.6841 |
 | C  baseline, seed 2 | `C_baseline_seed2` | 21.2470 | 0.6159 | 0.3559 | 4.2627 |
 
-- **effect** A − B = **+1.4489 dB**, against a published target of ~1.4 dB (`data/mira_bottleneck_ablation.json`, mira table `tab:exp-bottleneck`: 29.7 vs 28.3). The effect size reproduces.
+- **effect** A − B = **+1.4489 dB**, against a published target of ~1.4 dB (`data/mira_bottleneck_ablation.json`, mira table `tab:exp-bottleneck`: 29.7 vs 28.3). The point estimate is close, but with one run per arm and a seed spread of the same size it is not resolved -- and mira's numbers are converged where these stopped at 15,299 steps.
 - **noise** |A − C| = **1.1421 dB** between two runs of the identical configuration differing only in seed.
+- **what survives the seed spread**: B (18.656) is below BOTH baseline draws, A (20.105) and C (21.247) — short of the lower of the two by 1.449 dB. The intervention's sign and rough scale are consistent with the paper; its magnitude is not established here.
 - effect / noise = **1.27×**. The launcher's own criterion for calling the setup usable was effect > 3 × noise = 3.4262 dB, which this does not meet: **TOO NOISY** at this run length.
 
 Final validation loss (mira's val loop, 512 samples — a different quantity from the PSNR above, on a different sample set):

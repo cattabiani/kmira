@@ -136,8 +136,9 @@ same protocol. ~35 h of GPU for the plateau alone, which is why it sits behind t
   mira's own code.
 - **Verify before trusting.** Recurring pattern throughout the history: don't accept a metric or a
   result at face value — check it against a trivial baseline (a flat-gray-image PSNR caught the
-  `[-1,1]` range bug), reproduce a known effect from the paper to calibrate the benchmark itself
-  (the frozen-bottleneck A/B/C), and verify claims about the pipeline (resume, determinism,
+  `[-1,1]` range bug), try to recover a known effect from the paper to calibrate the benchmark
+  itself (the frozen-bottleneck A/B/C, which came back TOO NOISY -- a calibration that fails is
+  still calibration, and it is what set the paired protocol), and verify claims about the pipeline (resume, determinism,
   sampling coverage) by measurement, not by reading the code and assuming it does what it says.
 - **One experiment, one control.** New codec ideas get a dedicated variant file under
   `src/kmira/codec/variants/`, initialized to reproduce the stock behavior exactly where possible

@@ -27,7 +27,7 @@ entire divergence from mira is configuration and small standalone patch modules 
   - `baseline_image_base.yaml` — **the benchmark baseline**: mira's codec, image-only, Base decoder.
   - `baseline_image.yaml` — same but the stock XL decoder (kept for reference; too slow to iterate).
   - `calib_frozen_bottleneck.yaml` — the calibration downgrade (a frozen random bottleneck,
-    reproducing the paper's Table 4 "-1.4 dB" row).
+    targeting the paper's Table 4 "-1.4 dB" row).
   - `learned_layer_mix.yaml` / `learned_layer_mix_control.yaml` — Experiment 1 (below).
   - `learned_layer_mix_learn7.yaml` — Experiment 2's `learn7` arm: the same class as
     `learned_layer_mix.yaml` reading only mira's stock 7 blocks (`expose_layers`), i.e. freedom
@@ -53,8 +53,9 @@ these absolutely — the *relative* effects are what we calibrate against:
 | Decoder Large (Table 7) | 29.3 | 0.882 | 0.055 | 0.022 | 0.17 |
 | Decoder Base (Table 7) | 27.6 | 0.842 | 0.082 | 0.029 | 0.27 |
 
-Known bottleneck effects, used as **calibration targets** — if our benchmark cannot reproduce a gap
-of roughly this size, it cannot be trusted to judge a new bottleneck either:
+Known bottleneck effects, used as **calibration targets** — if our benchmark cannot resolve a gap
+of roughly this size, it cannot be trusted to judge a new bottleneck either. Note these are
+converged numbers, so a short calibration run is not the same measurement:
 
 | Bottleneck (Table 4) | PSNR | LPIPS |
 |---|---|---|
@@ -121,8 +122,9 @@ Appendix Table 22 additionally ablates *which* DINO layers are aggregated — th
 
 ## Running things
 
-**Calibration** (reproduces the paper's known frozen-bottleneck effect, to trust the benchmark
-itself before using it):
+**Calibration** (an attempt to recover the paper's known frozen-bottleneck effect, to decide
+whether the benchmark could be trusted before using it — it came back **TOO NOISY** at this run
+length, which is what forced the long paired protocol; see `postprocessing/RESULTS.md` 0b):
 
 ```bash
 bash codec/scripts/run_calibration.sh          # all three arms, ~2.2h each

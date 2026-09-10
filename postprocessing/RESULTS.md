@@ -107,7 +107,7 @@ Both are mira's own configs, so this is a config change and not a fork — train
 spatial where mira's 192× includes a 2× temporal reduction. This is the biggest single reason no
 absolute number on this page is comparable with the paper's.
 
-### 0b. The rig reproduces mira's own bottleneck result — but cannot resolve it unpaired
+### 0b. The calibration could not resolve a known effect — which is what set the protocol
 
 ![Three-arm calibration: effect size against seed noise](figures/calibration_three_arm.png)
 
@@ -119,23 +119,39 @@ Three runs of 15,299 steps, identical except for one thing each:
 | **B** | the same, bottleneck frozen at a random projection | 18.656 dB |
 | **C** | the same as A, different seed | 21.247 dB |
 
-**A − B is the reproduction, and it lands.** Freezing the bottleneck at a random projection is an
-intervention mira published a number for: 29.7 dB learned against 28.3 frozen, a drop of ≈1.4 dB
-(their table `tab:exp-bottleneck`). Here it costs **+1.4489 dB**. A reduced-scale single-GPU rig
-recovering a published effect at its published size is the basis for treating this as mira's
-counterpart rather than merely something shaped like it — and it is the reason every later number
-on this page is worth reading at all.
+B was meant to be a known quantity. Freezing the bottleneck at a random projection is an
+intervention mira published a number for — 29.7 dB learned against 28.3 frozen, a drop of ≈1.4 dB
+(their table `tab:exp-bottleneck`) — so if this rig could not see a gap of about that size, the rig
+was not measuring anything.
 
-**A − C is the limit, and it is larger than it should be.** A and C are the *same* configuration
-differing only in seed, and they came out **1.142 dB** apart. The launcher's own criterion for
-calling the setup usable was effect > 3 × noise = 3.426 dB; the ratio achieved was **1.27×**.
-Verdict: **TOO NOISY**. Validation loss agrees independently and slightly worse — the seed gap
-|A−C| = 0.1205 exceeds the intervention B−A = 0.0952.
+**The measured gap is A − B = +1.4489 dB, and it is not evidence.** Two reasons, and the section
+exists because of them:
 
-So the rig can see a bottleneck-sized effect but a single short unpaired comparison cannot separate
-it from a seed. Everything after this section uses **long runs** and **arms warm-started from one
+- **One run per arm, against a seed spread of the same size.** A and C are the *same*
+  configuration differing only in seed, and they landed **1.142 dB** apart. So +1.4489 cannot be
+  distinguished from a substantially smaller or larger effect; its closeness to the published 1.4
+  carries almost no information. The launcher's own criterion was effect > 3 × noise = 3.426 dB.
+  Ratio achieved: **1.27×**. Verdict: **TOO NOISY**.
+- **Not the same measurement mira made.** Their 29.7 and 28.3 are converged numbers; A and B
+  stopped at 15,299 steps with, as the trap below shows, 39% of the descent still ahead of them. A
+  gap between two undertrained models mixes how fast each trains with how good each gets. This was
+  never mira's ablation at mira's operating point, and the matching magnitude should not be read as
+  one.
+
+Validation loss makes the point independently and slightly worse: the seed gap |A−C| = 0.1205
+*exceeds* the intervention B−A = 0.0952. In that metric, changing the seed matters more than
+freezing the bottleneck.
+
+**What does survive.** B is below **both** baseline draws — 18.656 against A's 20.105 and C's
+21.247 — so the intervention's *sign* and rough scale are consistent with the paper, which is weak
+but not nothing. The magnitude is not established here and no number on this page depends on it.
+
+The useful output of this section is therefore the negative one, and it is the most valuable
+negative result in the project: **a single short unpaired comparison cannot separate an effect from
+a seed on this rig.** Everything after it uses **long runs** and **arms warm-started from one
 checkpoint on an identical per-chunk seed schedule**, so the seed spread lands on both arms and
-cancels rather than being averaged over. Section 0d is the direct evidence that it does cancel.
+cancels instead of being averaged over. Section 0d is the direct evidence that it does cancel, and
+the reason to trust the later numbers is that design — not this section.
 
 Colour follows the *configuration*, not the run: A and C share a hue and differ by marker. Two blue
 curves landing far apart with the orange intervention *between* them is the finding.

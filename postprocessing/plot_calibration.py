@@ -6,8 +6,10 @@ Three runs of 15,299 steps each, before any experiment:
     B  identical but with the bottleneck frozen at a random projection -- a published ~1.4 dB effect
     C  baseline again, different seed -- the noise floor
 
-A−B says whether the benchmark can SEE a bottleneck-sized change. |A−C| says how big a gap has to
-be before it means anything. The launcher demanded A−B > 3·|A−C| to call the setup usable, and it
+A−B was meant to say whether the benchmark can SEE a bottleneck-sized change, and |A−C| how big a
+gap has to be before it means anything. The answer came back as: not at this run length. One run
+per arm and a seed spread the size of the effect means A−B is a point estimate and not a
+measurement, and A/B/C stopped undertrained where mira's published numbers are converged. The launcher demanded A−B > 3·|A−C| to call the setup usable, and it
 did not clear that. This figure is why the protocol for everything after looks the way it does.
 
 ONE PANEL, NOT TWO. What is plotted is mira's own validation loss (512 samples, parsed from the run
@@ -206,7 +208,7 @@ def build():
     spines(ax)
 
     fig.suptitle(
-        "The rig recovers mira's published bottleneck effect \u2014 but not through the seed noise",
+        "A known 1.4 dB effect, indistinguishable here from a change of seed",
         x=0.008,
         ha="left",
         fontsize=11.5,
@@ -216,11 +218,11 @@ def build():
     fig.text(
         0.012,
         0.025,
-        f"In PSNR: effect A−B = {effect:+.2f} dB, recovering the published ≈{expected:.1f} dB — so "
-        f"the rig measures what mira measures. But that is only {effect / noise:.2f}× the seed "
-        f"spread |A−C| = {noise:.2f} dB, against the {3 * noise:.2f} dB\n(3× noise) the launcher "
-        "required to call the setup usable. VERDICT at this length: TOO NOISY — hence long runs, "
-        "and arms paired on one warm start and one seed schedule.",
+        f"In PSNR: A−B = {effect:+.2f} dB against the published ≈{expected:.1f} dB — but with one "
+        f"run per arm and a seed spread |A−C| = {noise:.2f} dB, that agreement is not resolved. "
+        f"The launcher required {3 * noise:.2f} dB\n(3× noise) to call the setup usable; achieved "
+        f"{effect / noise:.2f}×. VERDICT: TOO NOISY — which is what forced long runs and arms "
+        "paired on one warm start and one seed schedule.",
         fontsize=8.5,
         color=INK,
         va="bottom",
@@ -243,11 +245,19 @@ def build():
             f"- **effect** A − B = **{effect:+.4f} dB**, against a published target of ~{expected} dB "
             f"(`data/mira_bottleneck_ablation.json`, mira table `tab:exp-bottleneck`: "
             f"{target['rows']['learned_convolution']['psnr']} vs "
-            f"{target['rows']['random_frozen_projection']['psnr']}). The effect size reproduces."
+            f"{target['rows']['random_frozen_projection']['psnr']}). The point estimate is close, "
+            "but with one run per arm and a seed spread of the same size it is not resolved -- and "
+            "mira's numbers are converged where these stopped at 15,299 steps."
         ),
         (
             f"- **noise** |A − C| = **{noise:.4f} dB** between two runs of the identical "
             "configuration differing only in seed."
+        ),
+        (
+            f"- **what survives the seed spread**: B ({b['psnr']:.3f}) is below BOTH baseline draws, "
+            f"A ({a['psnr']:.3f}) and C ({c['psnr']:.3f}) — short of the lower of the two by "
+            f"{min(a['psnr'], c['psnr']) - b['psnr']:.3f} dB. The intervention's sign and rough "
+            "scale are consistent with the paper; its magnitude is not established here."
         ),
         (
             f"- effect / noise = **{effect / noise:.2f}×**. The launcher's own criterion for calling "
