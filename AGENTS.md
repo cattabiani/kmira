@@ -191,6 +191,12 @@ any of these costs real time or a real bug, so they live here rather than only i
   mix roughly constant rather than letting it drift as a variant changes the latent. Worth knowing
   before suspecting it of confounding an arm-to-arm comparison: the factors are logged as
   `loss_*_auto_w` if you ever want to check rather than assume.
+- **The three calibration arms are cosine-annealed, the plateau run is not.**
+  `run_calibration.sh` sets `decay_steps = steps - warmup`, so each arm runs a full cosine to
+  `min_lr` over its own 15,300 steps and ends annealed; `run_plateau.sh` sets `decay_steps=0` and
+  holds 1e-4. Their readings are therefore NOT comparable at equal step counts, however tempting it
+  is — A_baseline's 20.105 at 15,299 and the plateau run's 20.123 at 16,000 look like a seed
+  replicate of the same configuration and are not one.
 - **`checkpoint_keep_recent` decides whether a run's trajectory can EVER be scored.** It defaults
   to 1 in `codec/configs/kmira_train_codec.yaml`, so intermediate checkpoints are deleted as
   training advances and a run scored only at the end can never be given a curve afterwards — the

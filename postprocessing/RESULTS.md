@@ -72,9 +72,18 @@ a shared step axis. It cannot be drawn: these runs used `checkpoint_keep_recent:
 intermediate checkpoint was deleted as they advanced, and PSNR for A/B/C exists at exactly one
 step. So what is plotted is mira's own validation loss — the only per-step record these arms have —
 with each arm's single final dB reading folded into the legend beside the arm it belongs to.
-Recovering the real PSNR curve means re-running all three arms (~6h of GPU) with checkpoints
-retained. Transforming the loss into something that rises would look like PSNR without being it,
-so it is not done.
+Recovering the real PSNR curve means re-running all three arms (≈5h of GPU) with checkpoints
+retained; scoring them afterwards is cheap (~25 min at `--n-frames 256`, which is valid for PSNR —
+only rFDD needs 2048). Neither the loss nor anything else on disk can be converted into it: PSNR
+needs MSE and L1 does not determine MSE, and transforming the loss into something that rises would
+look like PSNR without being it.
+
+**A tempting substitute that does not work.** The plateau run (0c) is the same baseline
+configuration, cold-started and scored from step 8,000, and its reading at 16,000 (20.123 dB) sits
+almost exactly on A's 20.105 at 15,299 — so it looks like a free third replicate of the baseline
+seed. It is not comparable. The calibration arms ran a full cosine decay to 1e-6 across their
+15,300 steps and therefore finished *annealed*, while the plateau run was mid-constant-LR at 1e-4.
+Different schedules at the same step; the near-agreement is a coincidence, not evidence.
 
 Colour follows the *configuration*, not the run: A and C are the same configuration, so they share
 a hue and differ by marker. Two blue curves landing far apart, with the orange intervention
