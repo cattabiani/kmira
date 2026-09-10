@@ -23,7 +23,8 @@ generated from the record, regenerable in one command.
 | `make_all.py` | regenerates all figures and `stats.md` |
 | `lib.py` | data loading, the validated palette, matplotlib style |
 | `plot_*.py` | one figure each; standalone-runnable |
-| `extract_layer_weights.py` | the only script needing local checkpoints (see below) |
+| `extract_layer_weights.py` | extraction: layer weights out of the arms' checkpoints |
+| `extract_setup_facts.py` | extraction: the codec's shape and parameter counts |
 | `data/*.json` | small committed inputs that are not in `benchmark.jsonl` |
 | `figures/*.png` | committed, so `RESULTS.md` renders without running anything |
 
@@ -37,17 +38,22 @@ pixi run python postprocessing/plot_trajectories.py   # or one at a time
 This works on a fresh clone: it reads only `codec/results/benchmark.jsonl` and `data/*.json`, both
 committed.
 
-**The one exception** is `extract_layer_weights.py`, which reads `encoder.layer_weights` out of the
-arms' `.pth` checkpoints. `checkpoints/` is gitignored and each file is ~4.4GB, so that script is a
-separate step that writes a few hundred bytes of `data/layer_weights.json` — which *is* committed.
-Re-run it after training more steps, then `make_all.py`:
+**The two exceptions** are the extraction scripts, which need things the repo does not ship:
 
 ```bash
-pixi run python postprocessing/extract_layer_weights.py
+pixi run python postprocessing/extract_layer_weights.py   # needs local checkpoints
+pixi run python postprocessing/extract_setup_facts.py     # needs the DINOv3 weights
 ```
 
-It records the checkpoint path and step for each arm in its output, so a figure drawn from stale
-weights is detectable rather than silent.
+`extract_layer_weights.py` reads `encoder.layer_weights` out of the arms' `.pth` files —
+`checkpoints/` is gitignored and each file is ~4.4GB, so it writes a few hundred bytes of
+`data/layer_weights.json` instead, which *is* committed. It records each arm's checkpoint path and
+step, so a figure drawn from stale weights is detectable rather than silent. **Re-run it after
+training more steps**, then `make_all.py`.
+
+`extract_setup_facts.py` constructs the codec to count parameters (including the XL decoder, to
+size the configuration that OOMs a 12GB card) and derives the compression ratio from the config
+arithmetic. It writes `data/setup.json`. Only re-run it if the model configs change.
 
 ## Rules this folder keeps
 
@@ -56,8 +62,13 @@ Worth stating, because the point of the folder is that its numbers can be truste
 - **No number is typed in from memory.** Figures read `benchmark.jsonl` or `data/*.json`. The prose
   in `RESULTS.md` quotes `stats.md`, which is generated. If the two disagree, `stats.md` wins.
 - **External numbers carry provenance.** The only hand-transcribed values are published numbers
-  from mira's technical report, in `data/mira_layer_ablation.json`, which records the source file,
-  the table label, that it was transcribed by hand, and why absolute values are not comparable.
+  from mira's technical report, in `data/mira_layer_ablation.json` and
+  `data/mira_bottleneck_ablation.json`. Each records the source file, the table label, that it was
+  transcribed by hand, and why absolute values are not comparable — only gaps between two of
+  mira's own rows are ever used.
+- **Claims with no data say so.** `RESULTS.md` section 0d collects the supporting work that
+  produced fixes rather than plottable numbers, explicitly labelled as having no figure, so the
+  boundary between "measured here" and "recorded in the history" is visible.
 - **Established and provisional stay separate.** An arm that is still running, or an interpretation
   that hasn't been measured, goes in the provisional section and says why.
 - **Arm-to-arm numbers only at matched steps.** All three arms were still improving when last

@@ -8,6 +8,102 @@ file's prose appears here. Sources: `codec/results/benchmark.jsonl` (written by
 
 ---
 
+<!-- from make_all.py -->
+
+### The benchmarked codec, as configured
+
+| | value |
+|---|---|
+| frame | 288×512×3 at 20 fps |
+| timesteps per sample | 1 (image-only) |
+| feature extractor | `dinov3_vitl16`, frozen |
+| aggregated blocks | [11, 13, 15, 17, 19, 21, 23] |
+| latent channels | 32 |
+| bottleneck stride | 2 spatial, 1 temporal |
+| decoder (Base, used) | width 768, depth 12, heads 12 |
+| decoder (XL, mira's stock) | width 1152, depth 28, heads 16 — 596,129,440 trainable, which is what OOMs 12GB |
+| parameters | 417,342,496 total = 114,188,320 trainable + 303,154,176 frozen (the DINOv3-L backbone) |
+| latent grid | 9×16 tokens |
+| compression | 442,368 → 4,608 values per frame = **96×**, spatial only |
+| optimiser | AdamW lr 0.0001, betas [0.9, 0.95], weight decay 0.1 |
+
+Source: `data/setup.json`, written by `extract_setup_facts.py` from `codec/configs/` and the constructed model.
+
+
+---
+
+<!-- from plot_calibration.py -->
+
+### Three-arm calibration, 15,299 steps per arm
+
+| arm | config | PSNR (dB) | SSIM | LPIPS | rFDD |
+|---|---|---|---|---|---|
+| A baseline | `A_baseline` | 20.1049 | 0.5929 | 0.4060 | 4.9754 |
+| B frozen bottleneck | `B_frozen_bneck` | 18.6560 | 0.5565 | 0.4861 | 9.6841 |
+| C baseline, seed 2 | `C_baseline_seed2` | 21.2470 | 0.6159 | 0.3559 | 4.2627 |
+
+- **effect** A − B = **+1.4489 dB**, against a published target of ~1.4 dB (`data/mira_bottleneck_ablation.json`, mira table `tab:exp-bottleneck`: 29.7 vs 28.3). The effect size reproduces.
+- **noise** |A − C| = **1.1421 dB** between two runs of the identical configuration differing only in seed.
+- effect / noise = **1.27×**. The launcher's own criterion for calling the setup usable was effect > 3 × noise = 3.4262 dB, which this does not meet: **TOO NOISY** at this run length.
+
+
+---
+
+<!-- from plot_baseline_elbow.py -->
+
+### Baseline plateau search and anneal
+
+- Constant LR 1e-4 from step 8,000 to the elbow at **272,000** steps, PSNR 19.4139 → **24.7466** dB.
+- Cosine anneal 1e-4 → 1e-6 over 32,000 further steps: 24.7466 → **24.8850** dB, a gain of **+0.1384** dB.
+- Largest single jump: **+1.308 dB** at step 96,000 (from 21.7307 to 23.0390).
+  - The 6 readings immediately before it (48,000–88,000) averaged **+0.116** dB per 8k and never exceeded **+0.157**.
+- Second false plateau: steps 152,000–168,000 all moved <0.05 dB per 8k (24.1005 → 24.1359), then +0.178 dB at 176,000.
+- Final 3 readings before the elbow: 256k 24.6892, 264k 24.7362, 272k 24.7466 — the flatness the elbow was called on.
+
+| step | PSNR (dB) | Δ per 8k | phase |
+|---|---|---|---|
+| 8000 | 19.4139 |  | constant LR |
+| 16000 | 20.1229 | +0.709 | constant LR |
+| 24000 | 20.5342 | +0.411 | constant LR |
+| 32000 | 20.8290 | +0.295 | constant LR |
+| 40000 | 21.0350 | +0.206 | constant LR |
+| 48000 | 21.1719 | +0.137 | constant LR |
+| 56000 | 21.2702 | +0.098 | constant LR |
+| 64000 | 21.4268 | +0.157 | constant LR |
+| 72000 | 21.5189 | +0.092 | constant LR |
+| 80000 | 21.6331 | +0.114 | constant LR |
+| 88000 | 21.7307 | +0.098 | constant LR |
+| 96000 | 23.0390 | +1.308 | constant LR |
+| 104000 | 23.4904 | +0.451 | constant LR |
+| 112000 | 23.6627 | +0.172 | constant LR |
+| 120000 | 23.8034 | +0.141 | constant LR |
+| 128000 | 23.8979 | +0.094 | constant LR |
+| 136000 | 23.9967 | +0.099 | constant LR |
+| 144000 | 24.0811 | +0.084 | constant LR |
+| 152000 | 24.1005 | +0.019 | constant LR |
+| 160000 | 24.1246 | +0.024 | constant LR |
+| 168000 | 24.1359 | +0.011 | constant LR |
+| 176000 | 24.3139 | +0.178 | constant LR |
+| 184000 | 24.3497 | +0.036 | constant LR |
+| 192000 | 24.4378 | +0.088 | constant LR |
+| 200000 | 24.4857 | +0.048 | constant LR |
+| 208000 | 24.5070 | +0.021 | constant LR |
+| 216000 | 24.4644 | -0.043 | constant LR |
+| 224000 | 24.4890 | +0.025 | constant LR |
+| 232000 | 24.5310 | +0.042 | constant LR |
+| 240000 | 24.5845 | +0.053 | constant LR |
+| 248000 | 24.6423 | +0.058 | constant LR |
+| 256000 | 24.6892 | +0.047 | constant LR |
+| 264000 | 24.7362 | +0.047 | constant LR |
+| 272000 | 24.7466 | +0.010 | constant LR |
+| 280000 | 24.7712 | +0.025 | cosine anneal |
+| 288000 | 24.7863 | +0.015 | cosine anneal |
+| 296000 | 24.8304 | +0.044 | cosine anneal |
+| 304000 | 24.8850 | +0.055 | cosine anneal |
+
+
+---
+
 <!-- from plot_trajectories.py -->
 
 ### PSNR by arm and step

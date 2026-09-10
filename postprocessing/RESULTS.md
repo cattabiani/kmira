@@ -12,8 +12,120 @@ checkpoint. That file is the record but it is not readable — this page is the 
 pixi run python postprocessing/make_all.py
 ```
 
-Results are split into **established** (paired, matched-step, complete) and **provisional** (arms
-still running, or interpretation rather than measurement). The split is the point of the page.
+The page runs in dependency order: **the foundation** (how the benchmarked codec was built,
+calibrated and trained — everything else is a comparison against its output), then results split
+into **established** (paired, matched-step, complete) and **provisional** (arms still running, or
+interpretation rather than measurement). That split is the point of the page.
+
+---
+
+## The foundation
+
+Everything below this section is a *comparison against a fixed point*. This part is how that fixed
+point was built and why it can be trusted — it is the load-bearing work, and none of the
+experiment results mean anything without it.
+
+### 0a. A deliberately smaller codec, so it could be trained near its own ceiling
+
+mira's codec is a frozen DINOv3-L/16 feature extractor → a learned linear bottleneck → a ViT
+decoder. This rig keeps that structure exactly and shrinks the parts that make it unaffordable on
+one consumer GPU (RTX 4070 Ti, 12GB):
+
+| | value |
+|---|---|
+| frame | 288×512×3 at 20 fps |
+| timesteps per sample | **1 — image-only**, no temporal modelling |
+| feature extractor | `dinov3_vitl16`, frozen |
+| aggregated blocks | `[11, 13, 15, 17, 19, 21, 23]` (RAEv2's default, mira's choice) |
+| latent | 32 channels on a 9×16 token grid |
+| decoder used | **Base**: width 768, depth 12, heads 12 |
+| decoder in mira's stock config | XL: width 1152, depth 28, heads 16 — 596,129,440 trainable |
+| parameters | 417,342,496 total = **114,188,320 trainable** + 303,154,176 frozen (the backbone) |
+| compression | 442,368 → 4,608 values per frame = **96×**, spatial only |
+| optimiser | AdamW, lr 1e-4, betas [0.9, 0.95], weight decay 0.1 |
+
+Two choices here matter for reading anything downstream.
+
+**The Base decoder, not mira's XL.** The XL configuration comes to **596,129,440 trainable
+parameters** against Base's 114,188,320, and OOMs on 12GB under fp32 Adam.
+The first response was to fork mira's trainer to force bf16; the actual fix was to use mira's own
+smaller Base config, which deleted the fork — training now runs `mira/scripts/train_codec.py`
+completely unmodified, config-only. The better reason to prefer Base emerged afterwards: it is the
+only size cheap enough to train *near its own convergence ceiling*, and comparing two
+near-converged variants is a different and much sounder thing than comparing two undertrained ones.
+
+**Image-only.** `timesteps: 1` and no temporal stride, so the 96× compression here is purely
+spatial where mira's 192× includes a 2× temporal reduction. This is the single biggest reason no
+absolute number on this page is comparable with the paper's.
+
+### 0b. The benchmark was calibrated before it was trusted — and it failed its own test
+
+![Three-arm calibration: effect size against seed noise](figures/calibration_three_arm.png)
+
+Before running any experiment: can this setup detect a bottleneck-sized change, and how big must a
+gap be before it means anything? Three runs of 15,299 steps — a baseline (**A**), the same thing
+with the bottleneck frozen at a random projection (**B**, a published ≈1.4 dB effect), and the
+baseline again with a different seed (**C**, the noise floor).
+
+- **The effect size reproduced.** A − B = **+1.4489 dB** against mira's published ≈1.4 dB (their
+  table `tab:exp-bottleneck`: 29.7 learned vs 28.3 random frozen). The benchmark can see a
+  bottleneck-sized change.
+- **The comparison could not resolve it.** Two runs of the *identical* configuration, differing
+  only in seed, came out **1.142 dB** apart. The launcher's own criterion for calling the setup
+  usable was effect > 3 × noise = 3.426 dB. Ratio achieved: **1.27×**. Verdict: **TOO NOISY**.
+
+This is the most useful negative result in the project, and it is why the protocol looks the way it
+does. Unpaired comparisons at short run lengths are worthless here. Everything after this uses
+**long runs** and **paired arms warm-started from one checkpoint on an identical per-chunk seed
+schedule**, so the seed spread cancels instead of being averaged over. That the paired arms later
+traced the *same* dip-and-recovery shape (section 1) is the evidence that the cancellation works.
+
+### 0c. Training the baseline to its elbow — through two false plateaus
+
+![Baseline plateau search, elbow and anneal](figures/baseline_elbow.png)
+
+The locked baseline is a constant-LR run taken to the point where it stopped improving, then
+annealed. The top panel is scored PSNR; the bottom panel is the per-reading increment, which is
+what makes "flat" falsifiable rather than a judgement call.
+
+- Constant LR 1e-4 from step 8,000 to the elbow at **272,000** steps: 19.4139 → **24.7466 dB**.
+- Cosine anneal 1e-4 → 1e-6 over 32,000 further steps: 24.7466 → **24.8850 dB**, a gain of
+  **+0.138 dB**. That is `checkpoint-304000`, the locked baseline.
+
+**Twice this run looked converged and was not.** The six readings from 48k to 88k averaged
+**+0.116 dB** per 8k and never exceeded +0.157 — then it jumped **+1.31 dB** in a single 8k window
+at 96,000. Later, steps 152k–168k each moved under 0.05 dB, three consecutive readings any
+reasonable eye would call a plateau, and then it gained **+0.18 dB** at 176,000. Stopping at either point would have locked in a baseline over a
+dB short, and every experiment since would have been measured against it.
+
+Hence the rule this project now follows: an elbow needs *several* trailing readings, and the
+increment panel is the thing to read, not the curve.
+
+**Why the anneal is a separate phase, and which number to compare against.** The +0.138 dB the
+anneal buys is a property of the *low learning rate*, not of a better region of parameter space. A
+warm start resets the optimiser and raises the LR again, handing that gain straight back. So a
+constant-LR warm-started arm is read against the **24.747 plateau**, never the annealed 24.885 —
+which is why both lines appear on every trajectory figure below.
+
+### 0d. Supporting work with no figure
+
+Recorded here for completeness because the results lean on it, but it produced fixes rather than
+plottable data. Full detail in [`../CHANGELOG.md`](../CHANGELOG.md) and
+[`../AGENTS.md`](../AGENTS.md).
+
+- **A `[-1, 1]` vs `[0, 1]` pixel-range bug**, caught by scoring a flat gray image and finding it
+  beat the real reconstructions. It silently zeroed every negative pixel. This is why the first
+  thing the benchmark does with any new metric is check it against a trivial baseline.
+- **Three hidden biases in eval sampling**, all found by measurement rather than inspection: the
+  streaming loader stuck on 3 of 17 matches, unequal per-match weighting, and `max_clips` only ever
+  sampling the opening minutes of each match. Every score on this page post-dates those fixes.
+- **A data-repetition bug**: mira's train loader reseeds from `run.seed` on every process start and
+  is not checkpointed, so chunked hourly training with a fixed seed replayed the identical stream
+  every restart. It invalidated 56,000 steps of coverage before it was found. The per-chunk seed
+  schedule that fixes it is also what makes the paired arms share data exactly.
+- **No forked trainer.** Every divergence from mira is Hydra config or a small standalone patch
+  module, so the baseline is a faithful reproduction of mira's own training path and not of a
+  modified one.
 
 ---
 
