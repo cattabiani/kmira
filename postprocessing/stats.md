@@ -58,52 +58,6 @@ Note `plateau_baseline` (RESULTS.md calls it *the baseline run*) reads as mixed 
 
 ---
 
-<!-- from plot_calibration.py -->
-
-### Three-arm calibration, 15,299 steps per arm
-
-Final scored PSNR, `eval_codec` on 2048 held-out frames:
-
-| arm | config | PSNR (dB) | SSIM | LPIPS | rFDD |
-|---|---|---|---|---|---|
-| A  baseline | `A_baseline` | 20.1049 | 0.5929 | 0.4060 | 4.9754 |
-| B  frozen bottleneck | `B_frozen_bneck` | 18.6560 | 0.5565 | 0.4861 | 9.6841 |
-| C  baseline, seed 2 | `C_baseline_seed2` | 21.2470 | 0.6159 | 0.3559 | 4.2627 |
-
-- **effect** A − B = **+1.4489 dB**, against a published target of ~1.4 dB (`data/mira_bottleneck_ablation.json`, mira table `tab:exp-bottleneck`: 29.7 vs 28.3). The point estimate is close, but with one run per arm and a seed spread of the same size it is not resolved -- and mira's numbers are converged where these stopped at 15,299 steps.
-- **noise** |A − C| = **1.1421 dB** between two runs of the identical configuration differing only in seed.
-- **what survives the seed spread**: B (18.656) is below BOTH baseline draws, A (20.105) and C (21.247) — short of the lower of the two by 1.449 dB. The intervention's sign and rough scale are consistent with the paper; its magnitude is not established here.
-- effect / noise = **1.27×**. The launcher's own criterion for calling the setup usable was effect > 3 × noise = 3.4262 dB, which this does not meet: **TOO NOISY** at this run length.
-
-Final validation loss (mira's val loop, 512 samples — a different quantity from the PSNR above, on a different sample set):
-
-| arm | last val step | loss_total | loss_mae |
-|---|---|---|---|
-| A  baseline | 14535 | 0.6707 | 0.1587 |
-| B  frozen bottleneck | 14535 | 0.7659 | 0.2001 |
-| C  baseline, seed 2 | 14535 | 0.5502 | 0.1180 |
-
-In validation loss the seed gap is **larger** than the intervention: |A−C| = 0.1205 against B−A = 0.0952. Same conclusion as the PSNR comparison, reached independently.
-
-#### Had the calibration arms settled?
-
-| arm | slope, first half | slope, last 5 readings | spread of last 6 | last reading |
-|---|---|---|---|---|
-| A  baseline | -0.0723 | -0.0078 | 0.0370 | 0.6707 |
-| B  frozen bottleneck | -0.0629 | -0.0041 | 0.0387 | 0.7659 |
-| C  baseline, seed 2 | -0.0934 | -0.0059 | 0.0503 | 0.5502 |
-
-Slopes are loss per 1,000 steps; negative is improving.
-
-Each arm's trailing trend is roughly an order of magnitude shallower than its opening one, so on the curve alone these look converged. But the residual slope over the last five readings is smaller than the spread of the last six in every arm, so the trend is inside the noise and the curve cannot tell you whether it has stopped. All three ticked *up* at the final reading.
-
-And flatness there would have meant nothing anyway. The baseline run — A's configuration taken to 272,000 steps — sits in the same flat band over steps 9k–20k of its own trace (loss 0.6427–0.6988, spread 0.0561) — and then runs to step 304,000, ending at 0.2076. Sitting in that band it still had 0.4912 of loss to shed, **39% of its entire descent** from 1.4550.
-
-In the metric the page is actually about, that band is 4.762 dB short of where the run ends: 20.123 dB at step 16,000 against 24.885 at step 304,000.
-
-
----
-
 <!-- from plot_baseline_elbow.py -->
 
 ### Baseline plateau search and anneal

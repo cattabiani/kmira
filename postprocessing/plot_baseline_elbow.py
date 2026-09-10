@@ -57,7 +57,7 @@ def build():
     jump1 = max(range(1, len(px)), key=lambda i: py[i] - py[i - 1])
     ax.annotate(
         f"apparent plateau: flat to {px[jump1 - 1] // 1000}k,\nthen +{py[jump1] - py[jump1 - 1]:.2f} dB\n"
-        f"(chunk seed 40 — see 0d)",
+        f"(chunk seed 40 — see 0c)",
         xy=(px[jump1], py[jump1]),
         xytext=(px[jump1] + 12000, py[jump1] - 2.05),
         fontsize=8,

@@ -41,6 +41,18 @@ protocol.
 
 ## Where things stand (as of the last commit)
 
+- **HIGHEST PRIORITY COMPUTE: the paired recalibration.** The benchmark has no working
+  demonstration that it can resolve an effect of the size it is asked to judge. The original
+  A/B/C study cannot provide one -- one run per arm, all three stopped undertrained at 15,299
+  steps, unpaired, effect 1.27x the seed spread against a required 3x. Two cold-started runs under
+  the baseline run's exact protocol replace it, and they answer both open questions at once:
+  `abl_frozen` and `abl_baseline` share seed base 1028 so the ablation is paired, and
+  `abl_baseline` doubles as an independent-seed replicate of the existing baseline run (base 28).
+  Pre-registered in `experiments/2026-09-10-paired-recalibration/NOTES.md`; run with
+  `bash codec/scripts/run_plateau.sh <hours> abl_frozen|abl_baseline`. ~13.3h per arm to 96,000
+  steps, ~37.6h to the baseline's 272,000. This outranks Experiments 3 and 4 -- every result in the
+  repo is a comparison whose credibility depends on these two numbers.
+
 - A calibrated, plateaued, annealed **baseline codec** is locked at
   `checkpoints/calibration/plateau_baseline/checkpoint-304000` (304k steps, PSNR 24.88). This is
   the fixed comparison point for every future variant.

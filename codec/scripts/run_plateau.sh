@@ -6,6 +6,21 @@
 #   bash codec/scripts/run_plateau.sh 1      # one hour
 #   bash codec/scripts/run_plateau.sh        # default 8 hours
 #
+# A second argument selects which ARM to run. All three use this identical protocol -- constant
+# 1e-4, hourly chunks, one checkpoint and one 2048-frame scoring per chunk, no anneal -- which is
+# the point: they are comparable because nothing about the schedule differs.
+#
+#   bash codec/scripts/run_plateau.sh 8               # baseline      (default; the locked baseline)
+#   bash codec/scripts/run_plateau.sh 8 abl_baseline  # baseline again, a NEW seed schedule
+#   bash codec/scripts/run_plateau.sh 8 abl_frozen    # bottleneck frozen at a random projection
+#
+# WHY THE TWO NEW ARMS SHARE A SEED BASE. abl_baseline and abl_frozen both run seed base 1028, so
+# they are paired on data chunk for chunk and their difference is the frozen-bottleneck ablation
+# with the seed spread cancelled -- the thing the original A/B/C calibration could not resolve,
+# because it ran one unpaired run per arm. abl_baseline then doubles as a seed replicate of the
+# existing baseline run (seed base 28), which is the other number that study failed to pin down.
+# One pair of runs, both questions. See experiments/2026-09-10-paired-recalibration/NOTES.md.
+#
 # STRUCTURE: an outer loop over hourly CHUNKS. Each chunk trains for an hour, validates, checkpoints
 # and scores -- all on the same step -- then moves on. An interruption loses at most the current
 # hour; every completed hour is already durable in results/benchmark.jsonl. mira's trainer
@@ -57,7 +72,16 @@ case "$HOURS" in
 esac
 [ "$HOURS" -lt 1 ] && { echo "usage: $0 <whole hours>, minimum 1" >&2; exit 1; }
 WARMUP=1000                          # only applies to the very first chunk; later ones are past it
-NAME=plateau_baseline
+
+# Which arm. The default reproduces this script's original behaviour exactly -- same output dir,
+# same `plateau-*` tags, same seed base -- so the existing baseline run continues seamlessly.
+ARM="${2:-baseline}"
+case "$ARM" in
+  baseline)     NAME=plateau_baseline       MODEL=baseline_image_base     TAG=plateau       SEED_BASE=28 ;;
+  abl_baseline) NAME=ablation_baseline      MODEL=baseline_image_base     TAG=abl_baseline  SEED_BASE=1028 ;;
+  abl_frozen)   NAME=ablation_frozen_bneck  MODEL=calib_frozen_bottleneck TAG=abl_frozen    SEED_BASE=1028 ;;
+  *) echo "usage: $0 <whole hours> [baseline|abl_baseline|abl_frozen]   (got arm '$ARM')" >&2; exit 1 ;;
+esac
 OUT="$PWD/checkpoints/calibration/$NAME"
 LOG="checkpoints/calibration/${NAME}.log"
 # A launcher around mira's unmodified trainer, not a fork: it patches torch.hub to resolve the
@@ -108,7 +132,7 @@ current_step () {
 # too thin for a real outage, not just a single dropped connection.
 score_checkpoint () {
   local step="$1"
-  if grep -q "\"tag\": \"plateau-$step\"" codec/results/benchmark.jsonl 2>/dev/null; then
+  if grep -q "\"tag\": \"$TAG-$step\"" codec/results/benchmark.jsonl 2>/dev/null; then
     echo "--- step $step already scored, skipping"
     return 0
   fi
@@ -117,7 +141,7 @@ score_checkpoint () {
   for attempt in 1 2 3 4 5; do
     if "$PIXI" run python -m kmira.benchmark.eval_codec \
       --checkpoint "$OUT/checkpoint-$step/checkpoint.pth" --n-frames 2048 \
-      --tag "plateau-$step" 2>&1 | tail -8; then
+      --tag "$TAG-$step" 2>&1 | tail -8; then
       return 0
     fi
     if [ "$attempt" -lt 5 ]; then
@@ -142,7 +166,8 @@ TOTAL=$(( GRID + N_CHUNKS * CHUNK ))
 WALL=$(python3 -c "print(f'{($TOTAL - $DONE) * $SEC_PER_STEP / 3600 + $N_CHUNKS * ($SCORE_SECONDS + 10) / 3600:.1f}')")
 
 echo "=================================================================="
-echo " PLATEAU PROBE -- slot of ${HOURS}h training"
+echo " PLATEAU PROBE [$ARM] -- slot of ${HOURS}h training"
+echo "   model        : $MODEL, seeds $((SEED_BASE + 1))+, tags ${TAG}-*"
 echo "   already done : $DONE steps"
 echo "   this slot    : +$((TOTAL - DONE)) steps -> $TOTAL total, in $N_CHUNKS chunks of $CHUNK"
 echo "   per hour     : $CHUNK steps, $VAL_PER_HOUR validations (every $VAL_EVERY), one checkpoint, one scoring (~$((SCORE_SECONDS / 60))min)"
@@ -190,8 +215,13 @@ while [ "$(current_step)" -lt "$TOTAL" ]; do
   # invocations, unlike a counter that would reset to 1 every time. Model weights are unaffected: a
   # resumed chunk immediately overwrites the seed-initialized weights from the checkpoint, so this
   # only changes which data (and dropout draws) that chunk sees, never what it resumes from.
+  #
+  # SEED_BASE differs per arm, so "same chunk index" means "same slice of the stream" only WITHIN
+  # an arm-pair that shares a base. That is deliberate: abl_baseline and abl_frozen share 1028 and
+  # are therefore paired on data, while the original baseline run's 28 makes it an independent
+  # draw -- which is what turns abl_baseline into a seed replicate of it.
   HOUR_INDEX=$((NEXT / CHUNK))
-  SEED=$((28 + HOUR_INDEX))
+  SEED=$((SEED_BASE + HOUR_INDEX))
 
   # Progress within THIS slot, not the overall run -- chunks left * (train + score + restart) is a
   # clean estimate since every chunk in a slot is the same size (CHUNK steps).
@@ -234,7 +264,7 @@ while [ "$(current_step)" -lt "$TOTAL" ]; do
     if "$PIXI" run python "$HUB_SCRIPT" \
       --config-dir="$PWD/codec/configs" \
       --config-name=kmira_train_codec \
-      model=baseline_image_base \
+      model="$MODEL" \
       dataset.train_index="$PWD/data/rocket_science/train" \
       dataset.test_index="$PWD/data/rocket_science/test" \
       run.output_dir="$OUT" \
@@ -299,4 +329,4 @@ echo "=================================================================="
 
 echo ""
 echo "No elbow yet? Add another slot -- it picks up exactly where this one stopped:"
-echo "  bash codec/scripts/run_plateau.sh <hours>"
+echo "  bash codec/scripts/run_plateau.sh <hours> $ARM"

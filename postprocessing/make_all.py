@@ -25,7 +25,10 @@ sys.path.insert(0, str(HERE))
 # (module, figure basename) in the order they appear in RESULTS.md: the foundation the benchmark
 # rests on first, then the experiments built on top of it.
 FIGURES = [
-    ("plot_calibration", "calibration_three_arm"),
+    # plot_calibration is deliberately NOT here. Its three-run study cannot support the claim it
+    # was meant to support (see RESULTS.md "Not on this page yet"), so the figure is not published
+    # while the page has no calibration section. The script stays, ready for the paired
+    # recalibration runs -- deleting it would throw away working code for a study that is queued.
     ("plot_baseline_elbow", "baseline_elbow"),
     ("plot_seed_effects", "seed_effects"),
     ("plot_trajectories", "arm_trajectories"),
@@ -112,6 +115,8 @@ def run_metadata_table() -> str:
             "warmstart_control": "control",
             "warmstart_learn7": "learn7",
             "warmstart_learned_mix": "learned_mix",
+            "ablation_baseline": "abl_baseline",
+            "ablation_frozen_bneck": "abl_frozen",
         }.get(name)
         n_psnr = len(lib.series(rows, prefix)) if prefix else sum(1 for r in rows if r["tag"] == name)
         seeds = rec["seeds_unique"]

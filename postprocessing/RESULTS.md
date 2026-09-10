@@ -18,8 +18,8 @@ a running arm is therefore stated qualitatively here and quantitatively in
 64k, freedom is 20%" went stale twice inside a single afternoon; prose that says "freedom has
 stopped growing while reach has not" stays true and points at the table for the number.
 
-The page runs in dependency order: **the foundation** (how the benchmarked codec was built,
-calibrated and trained — everything else is a comparison against its output), then results split
+The page runs in dependency order: **the foundation** (how the benchmarked codec was built and
+trained — everything else is a comparison against its output), then results split
 into **established** (paired, matched-step, complete) and **provisional** (arms still running, or
 interpretation rather than measurement). That split is the point of the page.
 
@@ -41,32 +41,34 @@ are in [`../CHANGELOG.md`](../CHANGELOG.md) and the gotcha list in
 
 ### The runs referred to on this page
 
-Seven runs appear below and several of them are the same configuration at different lengths, so
-they are named here once and by those names throughout.
+Several of these are the same configuration at different lengths, so they are named here once and
+by those names throughout.
 
 | name | what it is | length | LR |
 |---|---|---|---|
-| **A** | calibration arm: the baseline configuration | 15,299 | cosine to 1e-6 |
-| **B** | calibration arm: same, bottleneck frozen at a random projection | 15,299 | cosine to 1e-6 |
-| **C** | calibration arm: same as A, different seed | 15,299 | cosine to 1e-6 |
-| **the baseline run** | the same baseline configuration as A, run to its elbow | 272,000 | constant 1e-4 |
+| **the baseline run** | mira's codec at this rig's scale, run to its elbow | 272,000 | constant 1e-4 |
 | **the anneal** | the baseline run's final phase, producing `checkpoint-304000` | +32,000 | cosine to 1e-6 |
 | **`control`, `learn7`, `learned_mix`** | the three warm-start arms of Experiments 1 and 2, all started from `checkpoint-304000` | 200,000 each | constant 1e-4 |
 
-Two conventions that matter for reading the sections below:
-
-- **A, B and C are the *calibration* arms; `control`, `learn7` and `learned_mix` are the
-  *warm-start* arms.** They are different studies. Where the word "arm" appears alone it is
-  qualified.
-- **A and the baseline run are the same configuration**, differing only in how long they ran and
-  on what LR schedule. That is what makes some comparisons between them tempting and wrong — see
-  0b.
-
 Two shorthands for readings rather than runs: **"the plateau"** is the baseline run's final
 constant-LR reading, **24.747 dB** at step 272,000, and **"the annealed baseline"** is 24.885 at
-304,000. Warm-start arms are read against the former — 0c says why.
+304,000. Warm-start arms are read against the former — 0b says why.
 
 Per-run seeds, schedules and reading counts are in [`stats.md`](stats.md).
+
+### Not on this page yet: the calibration
+
+A benchmark should come with a demonstration that it can resolve an effect of the size it is being
+asked to judge. This one does not have that yet. An early three-run study attempted it and could
+not resolve anything — one run per arm, all three stopped undertrained, and unpaired, so the
+measured effect came out 1.27× the seed spread against a required 3×. It is not reported here,
+because it cannot support the claim it was meant to support.
+
+Two paired runs under the protocol below are pre-registered to replace it and are **the project's
+highest-priority compute**: see
+[`../experiments/2026-09-10-paired-recalibration/NOTES.md`](../experiments/2026-09-10-paired-recalibration/NOTES.md).
+Until they land, treat everything on this page as within-setup and comparative — which is what the
+paired design in 0c supports on its own, and which is all any claim here makes.
 
 ### 0a. A deliberately smaller codec, scoped to one consumer GPU
 
@@ -107,79 +109,7 @@ Both are mira's own configs, so this is a config change and not a fork — train
 spatial where mira's 192× includes a 2× temporal reduction. This is the biggest single reason no
 absolute number on this page is comparable with the paper's.
 
-### 0b. The calibration could not resolve a known effect — which is what set the protocol
-
-![Three-arm calibration: effect size against seed noise](figures/calibration_three_arm.png)
-
-Three runs of 15,299 steps, identical except for one thing each:
-
-| | configuration | final PSNR |
-|---|---|---|
-| **A** | the baseline codec | 20.105 dB |
-| **B** | the same, bottleneck frozen at a random projection | 18.656 dB |
-| **C** | the same as A, different seed | 21.247 dB |
-
-B was meant to be a known quantity. Freezing the bottleneck at a random projection is an
-intervention mira published a number for — 29.7 dB learned against 28.3 frozen, a drop of ≈1.4 dB
-(their table `tab:exp-bottleneck`) — so if this rig could not see a gap of about that size, the rig
-was not measuring anything.
-
-**The measured gap is A − B = +1.4489 dB, and it is not evidence.** Two reasons, and the section
-exists because of them:
-
-- **One run per arm, against a seed spread of the same size.** A and C are the *same*
-  configuration differing only in seed, and they landed **1.142 dB** apart. So +1.4489 cannot be
-  distinguished from a substantially smaller or larger effect; its closeness to the published 1.4
-  carries almost no information. The launcher's own criterion was effect > 3 × noise = 3.426 dB.
-  Ratio achieved: **1.27×**. Verdict: **TOO NOISY**.
-- **Not the same measurement mira made.** Their 29.7 and 28.3 are converged numbers; A and B
-  stopped at 15,299 steps with, as the trap below shows, 39% of the descent still ahead of them. A
-  gap between two undertrained models mixes how fast each trains with how good each gets. This was
-  never mira's ablation at mira's operating point, and the matching magnitude should not be read as
-  one.
-
-Validation loss makes the point independently and slightly worse: the seed gap |A−C| = 0.1205
-*exceeds* the intervention B−A = 0.0952. In that metric, changing the seed matters more than
-freezing the bottleneck.
-
-**What does survive.** B is below **both** baseline draws — 18.656 against A's 20.105 and C's
-21.247 — so the intervention's *sign* and rough scale are consistent with the paper, which is weak
-but not nothing. The magnitude is not established here and no number on this page depends on it.
-
-The useful output of this section is therefore the negative one, and it is the most valuable
-negative result in the project: **a single short unpaired comparison cannot separate an effect from
-a seed on this rig.** Everything after it uses **long runs** and **arms warm-started from one
-checkpoint on an identical per-chunk seed schedule**, so the seed spread lands on both arms and
-cancels instead of being averaged over. Section 0d is the direct evidence that it does cancel, and
-the reason to trust the later numbers is that design — not this section.
-
-Colour follows the *configuration*, not the run: A and C share a hue and differ by marker. Two blue
-curves landing far apart with the orange intervention *between* them is the finding.
-
-**Bonus trap: these curves nearly plateau and then start improving again.** Each arm's trailing
-trend is an order of magnitude shallower than its opening one (A: −0.0078 loss per 1k steps over
-the last five readings against −0.0723 over the first half), and all three tick *up* at the final
-reading. On the curve alone they look finished. They are not: the residual slope is smaller than
-the reading-to-reading wobble in every arm — the last six readings span 0.037–0.050 — so the curve
-cannot tell you whether the descent has stopped. **The baseline run** settles it, being A's
-configuration taken to 272,000 steps: it sits in this same flat band over its own steps 9k–20k
-(loss 0.6427–0.6988) and then keeps going to 0.2076. **39% of its entire descent, worth 4.762 dB,
-was still ahead of it** at the point A, B and C stopped. Flat at 15,000 steps is not converged at
-15,000 steps, and 0c and 0d are both consequences of that.
-
-**One tempting substitute that does not work.** Since A and the baseline run are the same
-configuration, the baseline run looks like a free extra replicate of A — and its reading at step
-16,000, **20.123 dB**, sits almost exactly on **A's 20.105** at 15,299. Treating that as a second
-measurement of the noise floor would be wrong. A finished *annealed*, having cosine-decayed to
-1e-6 across its 15,300 steps; the baseline run was still mid-flight at a constant 1e-4 at its
-16,000. Same configuration and nearly the same step, but different learning rates, so the
-near-agreement is a coincidence and not a replicate.
-
-The figure plots mira's own validation loss because that is the per-step record these three runs
-kept; their PSNR exists only at the final step, which is why it appears in the legend rather than
-as a second curve.
-
-### 0c. Training the baseline to its elbow
+### 0b. Training the baseline to its elbow
 
 ![Baseline plateau search, elbow and anneal](figures/baseline_elbow.png)
 
@@ -206,7 +136,7 @@ which is why both lines appear on every trajectory figure below.
 
 Both of those turned out to have a cause, which is the next section.
 
-### 0d. Neither "false plateau" was a plateau — both were the data schedule
+### 0c. Neither "false plateau" was a plateau — both were the data schedule
 
 ![Per-chunk seed effects across all four runs](figures/seed_effects.png)
 
@@ -220,7 +150,7 @@ same seeds at different step numbers and at very different maturity. If a stretc
 training dynamics it tracks the step; if it belongs to the data it tracks the seed. It tracks the
 seed:
 
-| chunk seed | the baseline run | `control` | what 0c called it |
+| chunk seed | the baseline run | `control` | what 0b called it |
 |---|---|---|---|
 | 36–39 | +0.157 … +0.092 | −0.080 … −0.396 | first "false plateau" |
 | **40** | **+1.308** | **+0.795** | the jump that ended it |
@@ -267,7 +197,7 @@ arm-to-arm gap is the number this design supports.
 Two things visible in the figure that are easy to miss in a table:
 
 - **Both arms dip through 72k–96k and recover at 104k.** Those are chunk seeds 36–39 and 40, and
-  section 0d shows the same seeds doing the same thing in the baseline run at a different point in
+  section 0c shows the same seeds doing the same thing in the baseline run at a different point in
   training. The shape is the data schedule, not the intervention. It is why the control had to be
   run to full length: before it was, the variant's jump at 104k looked like it might be the idea.
 - **The control keeps creeping up.** Constant LR was still buying roughly +0.03 dB per 8k steps out
