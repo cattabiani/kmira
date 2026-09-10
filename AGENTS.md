@@ -50,7 +50,13 @@ much smaller, single-GPU scale, using paired A/B comparisons against a locked ba
   abandoned them (92.4% of normalized mass on the 17 non-stock layers, 45.7% on layer 0 alone); the
   paper's own reasoning for its layer choice is about preserving semantics *for the world model*,
   and its one relevant ablation favors depth there too — so this is a demonstrated reconstruction
-  win with an open question about the downstream latent, not a settled improvement to MIRA. See
+  win with an open question about the downstream latent, not a settled improvement to MIRA. Two
+  things sharpen that: **P-DINO never separates the arms** (the gain is concentrated in PSNR, which
+  mira's own layer ablation shows is the metric *least* sensitive to layer choice, by 14x-47x), and
+  mira's stated methodology is to *select* codecs on downstream metrics while *training* them on
+  reconstruction — so the fixed layer set is best read as a **regularizer** encoding what the loss
+  cannot express, not as an untuned hyperparameter. On that reading, learning the weights removes a
+  constraint rather than tuning one, and the gain is predicted not to transfer. See
   `codec/README.md`'s "Current state" and `codec/results/benchmark.jsonl` (tags `learned_mix-*` /
   `control-*`) for the numbers — don't assume the outcome from this file.
 - Hardcoded paths were removed in favor of `direnv` (`.envrc`) + two env vars

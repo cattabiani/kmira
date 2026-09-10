@@ -76,7 +76,9 @@ neighborhood, staying at 24.5-24.7dB throughout. (Both halves of that sentence w
 2026-09-09, below, once the control was run to a matched 200,000 steps: it finished at 24.992, and
 the headline became the matched-step gap of +2.914dB.) Not a PSNR-only effect: SSIM, LPIPS, P-DINO and
 rFDD all improved together, which rules out the aggregation gaming pixel error at perceptual
-quality's expense. The control's flatness is what makes this attributable to the learned
+quality's expense. (Three of those four hold. **P-DINO does not** — corrected 2026-09-10 below:
+it never separates the arms, so the claim was true against the plateau and false as an arm-to-arm
+statement.) The control's flatness is what makes this attributable to the learned
 aggregation itself, not extra training on a restarted optimizer.
 
 The curve was not a smooth climb — two separate dip-then-jump stretches (16k-24k restart settling,
@@ -193,6 +195,50 @@ config would have built a 7-weight encoder for those saved configs and failed th
 two finished arms produced, and only at scoring time, which is exactly the failure mode `AGENTS.md`
 warns about. The argument defaults to all 24; both arms' step-200,000 checkpoints were re-loaded
 after the change to confirm.
+
+## 2026-09-10 — P-DINO doesn't separate the arms, and what that reframes
+
+Went to check a claim rather than requote it, and it did not hold.
+
+Every write-up of Experiment 1 said "SSIM, LPIPS, P-DINO and rFDD all improved together, which
+rules out the aggregation trading perceptual quality for pixel error". Three of the four hold.
+**P-DINO does not.** Across all 25 matched steps the sign of `learned_mix - control` flips six
+times and the gap is ~1% either way, while within either arm P-DINO swings ~20% following the
+shared dips — so the metric is dominated by training phase, not by which arm you are in. Both arms
+improve P-DINO against the plateau's 10.0595e-5, but the *control* improves it slightly more
+(9.6885 vs 9.7621e-5), so none of that is attributable to the aggregation. True against the
+plateau, false arm-to-arm: exactly the confusion the matched-step rule exists to prevent.
+
+So the +2.914 dB buys PSNR (+11.7%), LPIPS (+22.6%) and rFDD (+7.9%), and nothing measurable on
+the benchmark's one paired DINOv3-feature perceptual distance. Not a degradation — an absence of
+gain, on the metric closest to "is this semantically faithful".
+
+**That matters because mira's own layer ablation has the opposite signature.** Dropping to the
+deepest block alone costs 1.0% of PSNR but 44-47% of rFID/rFVD/rFDD and 14% of P-DINO — PSNR is
+the *least* layer-sensitive metric in their table, by 14x to 47x. Our gain is concentrated in
+precisely that metric. (This also corrects a claim made earlier in the day that the *downstream*
+metrics were the sensitive ones: they move 6-14%, less than the reconstruction Fréchet distances.
+PSNR is the outlier, not downstream.)
+
+**The reframing.** mira's methodology says outright: *"We judge every codec by the world model
+trained on it and select for an easy-to-generate latent, treating reconstruction quality as
+secondary."* And the codec is confirmed reconstruction-only in training — `CodecLoss` is L1 +
+LPIPS + DINO latent consistency, and nothing in `src/mira/codec/` references the world model. So
+mira selects on downstream and trains on reconstruction, and the gap between the two is bridged
+*by the layer set*.
+
+Which means the fixed uniform mean over deep-ish blocks is not an untuned hyperparameter. It is a
+**regularizer**: a hard constraint that discards shallow detail on purpose, encoding downstream
+knowledge the loss cannot express. Fixing it is the mechanism, which is why nobody tuned it.
+Learning the weights therefore does not improve a hyperparameter — it removes the constraint, and
+the reconstruction objective immediately does what the constraint existed to prevent: goes as
+shallow as it is permitted. Visible in the weights themselves — `learned_mix` (24 blocks readable)
+puts 45.7% on layer 0; `learn7` (blocks 11-23 only) puts 72.5% on layer 11. Each dumps its mass on
+the shallowest block it can reach, and both abandon the deep residual.
+
+This turns "does the gain survive downstream?" from an open shrug into a directional prediction: it
+predicts not. Still untestable in this rig, but it is a prediction now, and `learn7` landing near
+`control` would be consistent with it.
 
 ## 2026-08-26 — Publishing pass
 

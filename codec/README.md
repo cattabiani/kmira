@@ -76,8 +76,11 @@ Appendix Table 22 additionally ablates *which* DINO layers are aggregated — th
 - **Experiment 1** (learned per-DINO-layer aggregation,
   `src/kmira/codec/variants/learned_layer_mix.py`): **complete, both arms at 200,000 steps.**
   `learned_mix` 27.905 dB against `control` 24.992 dB — a paired, matched-step gain of
-  **+2.914 dB**, and not a PSNR-only effect: SSIM (0.8587 vs 0.8105), LPIPS (0.0820 vs 0.1059) and
-  rFDD (0.6209 vs 0.6740) all move together with it.
+  **+2.914 dB**. SSIM (0.8587 vs 0.8105), LPIPS (0.0820 vs 0.1059) and rFDD (0.6209 vs 0.6740) move
+  with it, but **P-DINO does not separate the arms at all** (−0.8% at 200k, sign flipping six times
+  across the run, against a ~20% within-arm swing). The gain is concentrated in PSNR, which is the
+  metric mira's own layer ablation shows to be *least* sensitive to layer choice — by 14x to 47x.
+  See `experiments/2026-08-13-learned-layer-mix/NOTES.md`, "P-DINO does not separate the arms".
 
   Quote the arm-to-arm gap, not "+3.16 dB over the plateau". The control ends 0.245 dB above the
   24.747 plateau it warm-started from rather than dead flat, so the pre-registered rule applies

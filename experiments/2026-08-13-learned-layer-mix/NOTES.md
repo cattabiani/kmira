@@ -58,7 +58,7 @@ Both arms have now been run to **200,000 steps**, so the comparison is at matche
 | PSNR | 24.992 | 27.905 | **+2.914** |
 | SSIM | 0.8105 | 0.8587 | +0.0482 |
 | LPIPS | 0.1059 | 0.0820 | -0.0239 |
-| P-DINO | 9.69e-05 | 9.76e-05 | +0.7e-06 |
+| P-DINO | 9.69e-05 | 9.76e-05 | +0.7e-06 (no separation — see below) |
 | rFDD | 0.6740 | 0.6209 | -0.0531 |
 
 **The headline is the arm-to-arm gap at matched steps, +2.914 dB — not +3.16 dB over the
@@ -88,6 +88,65 @@ Both arms were still climbing at the last reading, the variant faster (+0.065 pe
 Do not compare 27.905 to the paper's 27.6 Base-decoder row. Different setup: this rig is image-only
 and reduced-scale, and its own faithful baseline sits at 24.747 where the paper's Base decoder
 reaches 27.6.
+
+## P-DINO does not separate the arms, and that is the interesting part
+
+Worth stating separately because the first write-up of this result got it wrong. It claimed SSIM,
+LPIPS, P-DINO and rFDD "all improved together, which rules out the aggregation trading perceptual
+quality for pixel error". Three of those four hold. **P-DINO does not.**
+
+Across all 25 matched steps the sign of `learned_mix - control` on P-DINO flips six times, and the
+gap is ~1% either way, while *within* either arm P-DINO swings ~20% following the shared dips. So
+the intervention does not move P-DINO at all — the metric is dominated by training phase, not by
+which arm you are in:
+
+| | PSNR | SSIM | LPIPS | rFDD | P-DINO |
+|---|---|---|---|---|---|
+| `learned_mix` vs `control` @200k | **+11.7%** | +5.9% | +22.6% | +7.9% | −0.8%, sign unstable |
+
+Both arms *do* improve P-DINO against the 24.747 plateau's 10.0595e-5 (control 9.6885e-5,
+`learned_mix` 9.7621e-5) — but the control improves it slightly **more**, so none of that gain is
+attributable to the aggregation. The original claim was true against the plateau and false as an
+arm-to-arm statement, which is exactly the confusion the matched-step rule exists to prevent.
+
+What that leaves: the +2.914 dB buys pixel fidelity (PSNR), perceptual distance (LPIPS) and
+distributional feature fidelity (rFDD), and buys **nothing measurable** on the one paired
+DINOv3-feature perceptual distance in the benchmark. It is not a degradation. It is an absence of
+gain, on the metric closest to "is this reconstruction semantically faithful".
+
+Compare the direction of mira's own layer ablation (appendix, multi-layer vs last-block-only),
+which has the opposite signature — dropping to the deepest block alone costs only 1.0% of PSNR but
+44-47% of rFID/rFVD/rFDD and 14% of P-DINO. There, PSNR is the *least* sensitive metric to layer
+choice by a factor of 14 to 47. Here, PSNR is the metric that moves most. A gain concentrated in
+the least layer-sensitive metric is not what "found a better latent" looks like.
+
+## Reframing: mira's uniform mean is a regularizer, not an untuned hyperparameter
+
+The strongest reading of this experiment, and the one that survives the result.
+
+mira's own methodology (`sections/6.experiments.tex`) states: *"We judge every codec by the world
+model trained on it and select for an easy-to-generate latent, treating reconstruction quality as
+secondary."* And the codec is confirmed reconstruction-only in training — `CodecLoss` is L1 + LPIPS
++ DINO latent consistency, `scripts/train_codec.py` imports nothing from the world model, and
+`grep world_model src/mira/codec/` is empty. So mira **selects** on downstream and **trains** on
+reconstruction.
+
+That gap is bridged by the layer set. The fixed mean over deep-ish blocks is not a parameter nobody
+tuned — it is a hard constraint that discards shallow detail *on purpose*, encoding downstream
+knowledge the loss cannot express. Fixing it is the mechanism, which is why there was never a
+reason to tune it.
+
+So learning the weights does not improve a hyperparameter. It **removes a regularizer**, and the
+reconstruction objective immediately does what the regularizer existed to prevent: it goes as
+shallow as it is allowed to. That is visible directly in the weights — `learned_mix` (all 24
+blocks readable) put 45.7% on layer 0, and `learn7` (blocks 11-23 only) put 72.5% on layer 11.
+Each arm dumps its mass on the shallowest block available to it, and both abandon the deep
+residual mira keeps deliberately.
+
+This makes "does the gain survive downstream?" a directional prediction rather than an open shrug:
+it predicts not, because the gain comes from undoing the constraint whose purpose was the
+downstream latent. Untestable here, but it is a prediction, and `learn7` landing near `control`
+would be consistent with it.
 
 ## Side finding: the control is also 200k more steps of the stock recipe
 

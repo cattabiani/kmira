@@ -25,7 +25,8 @@ run should be read against).
 layers with uniform weights, RAEv2's k=7 default, adopted unchanged. Replacing that with 24 learned
 per-layer weights, initialised to reproduce the stock formula exactly, reached **27.905 dB against
 its paired control's 24.992 at a matched 200k steps — +2.914 dB**, with SSIM, LPIPS and rFDD
-improving alongside. Both arms are now complete at 200k, so that gap rests on a control observed
+improving alongside and P-DINO — the benchmark's one paired DINO-feature perceptual distance — not
+separating the arms at all. Both arms are now complete at 200k, so that gap rests on a control observed
 over the variant's full length rather than a quarter of it, and it is the control that makes the
 gain attributable to the aggregation rather than to the warm restart. Extending the control also
 showed that the variant's apparent takeoff at 104k is a feature of the shared seed schedule — both
