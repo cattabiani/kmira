@@ -42,6 +42,10 @@ MIRA.
 
 ## Where to look
 
+- **[postprocessing/RESULTS.md](postprocessing/RESULTS.md): the results, in figures.** Start here
+  if you want to know what came out rather than how to run it. Split into established and
+  provisional, with every number generated from `codec/results/benchmark.jsonl` rather than
+  written by hand — see [postprocessing/](postprocessing/) for how that is kept honest.
 - [codec/README.md](codec/README.md): current state of the codec work, how to run training and
   evaluation, the paper's reference numbers and the calibration targets.
 - [CHANGELOG.md](CHANGELOG.md): the narrative, what happened in what order and why.
@@ -50,8 +54,9 @@ MIRA.
 - [src/kmira/codec/variants/learned_layer_mix.py](src/kmira/codec/variants/learned_layer_mix.py):
   Experiment 1's full rationale, including why the latent-consistency loss had to be pinned, in the
   module docstring.
-- `codec/results/benchmark.jsonl`: every scored checkpoint (tags `learned_mix-*`, `control-*`,
-  `plateau-*`, `anneal-*`). The current numbers live here, not in prose.
+- `codec/results/benchmark.jsonl`: every scored checkpoint (tags `learned_mix-*`, `learn7-*`,
+  `control-*`, `plateau-*`, `anneal-*`). The current numbers live here, not in prose — and
+  `postprocessing/` turns them into figures rather than restating them.
 - `git log`: the reasoning trail. Commit messages carry the detail deliberately.
 
 ## Layout
@@ -65,6 +70,8 @@ MIRA.
   6.3) and `visualize_reconstruction.py` (a before/after PNG for one image).
 - `experiments/<date>-<idea-name>/` — one folder per experiment, with a `NOTES.md` describing the
   hypothesis, what changed, and results.
+- `postprocessing/` — figures and write-ups generated from the results record. Reads only; never
+  trains or scores. `pixi run python postprocessing/make_all.py` regenerates everything.
 - `checkpoints/`, `data/` — gitignored; local only; shared across every part of the project (raw
   datasets, weight caches, trained checkpoints), not nested under `codec/`.
 

@@ -17,7 +17,8 @@ DINOv3-L feature extractor -> learned bottleneck -> ViT decoder) that MIRA's wor
 predictions in. Not the world model itself yet, though the layout (`codec/`, with other parts
 getting their own sibling subfolder later) anticipates that.
 
-**Read `README.md` first, then `codec/README.md`.** The latter is a current-state reference —
+**Read `README.md` first, then `postprocessing/RESULTS.md` for what the results actually are, then
+`codec/README.md`.** The latter is a current-state reference —
 layout, how to run things, the locked baseline, where each experiment stands — not a history. For
 *why* things are the way they are, `git log` carries it (commit messages are written with that
 detail) and `CHANGELOG.md` is the narrative summary. Don't let `codec/README.md` grow back into a
@@ -116,6 +117,12 @@ same protocol. ~35 h of GPU for the plateau alone, which is why it sits behind t
 
 ## Conventions worth preserving
 
+- **Figures are generated, prose quotes them.** `postprocessing/` reads
+  `codec/results/benchmark.jsonl` and emits both the figures and `stats.md`; `RESULTS.md` quotes
+  only what `stats.md` contains, and `stats.md` wins any disagreement. This exists because two
+  claims in this repo's write-ups were wrong in ways a plot would have caught at once — a metric
+  that never separated the arms, and a weight share attributed to the wrong quantity. Don't
+  hand-type a number into a results document; regenerate and quote.
 - **No forked trainer.** Training runs mira's own `scripts/train_codec.py` unmodified; every
   divergence from mira is Hydra config (`codec/configs/`) or a small standalone module under
   `src/kmira/` (e.g. `lr_resume_override.py`, `pin_consistency_loss_layers.py`), not a copy-edit of
