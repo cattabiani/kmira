@@ -36,15 +36,27 @@ Source: `data/setup.json`, written by `extract_setup_facts.py` from `codec/confi
 
 ### Three-arm calibration, 15,299 steps per arm
 
+Final scored PSNR, `eval_codec` on 2048 held-out frames:
+
 | arm | config | PSNR (dB) | SSIM | LPIPS | rFDD |
 |---|---|---|---|---|---|
-| A baseline | `A_baseline` | 20.1049 | 0.5929 | 0.4060 | 4.9754 |
-| B frozen bottleneck | `B_frozen_bneck` | 18.6560 | 0.5565 | 0.4861 | 9.6841 |
-| C baseline, seed 2 | `C_baseline_seed2` | 21.2470 | 0.6159 | 0.3559 | 4.2627 |
+| A  baseline | `A_baseline` | 20.1049 | 0.5929 | 0.4060 | 4.9754 |
+| B  frozen bottleneck | `B_frozen_bneck` | 18.6560 | 0.5565 | 0.4861 | 9.6841 |
+| C  baseline, seed 2 | `C_baseline_seed2` | 21.2470 | 0.6159 | 0.3559 | 4.2627 |
 
 - **effect** A − B = **+1.4489 dB**, against a published target of ~1.4 dB (`data/mira_bottleneck_ablation.json`, mira table `tab:exp-bottleneck`: 29.7 vs 28.3). The effect size reproduces.
 - **noise** |A − C| = **1.1421 dB** between two runs of the identical configuration differing only in seed.
 - effect / noise = **1.27×**. The launcher's own criterion for calling the setup usable was effect > 3 × noise = 3.4262 dB, which this does not meet: **TOO NOISY** at this run length.
+
+Final validation loss (mira's val loop, 512 samples — a different quantity from the PSNR above, on a different sample set):
+
+| arm | last val step | loss_total | loss_mae |
+|---|---|---|---|
+| A  baseline | 14535 | 0.6707 | 0.1587 |
+| B  frozen bottleneck | 14535 | 0.7659 | 0.2001 |
+| C  baseline, seed 2 | 14535 | 0.5502 | 0.1180 |
+
+In validation loss the seed gap is **larger** than the intervention: |A−C| = 0.1205 against B−A = 0.0952. Same conclusion as the PSNR comparison, reached independently.
 
 
 ---
@@ -118,8 +130,8 @@ Source: `data/setup.json`, written by `extract_setup_facts.py` from `codec/confi
 | 48000 | 24.718 | 25.033 | 26.011 |
 | 56000 | 24.727 | 25.073 | 26.316 |
 | 64000 | 24.729 | 25.097 | 26.526 |
-| 72000 | 24.649 | — | 26.592 |
-| 80000 | 24.472 | — | 26.506 |
+| 72000 | 24.649 | 25.018 | 26.592 |
+| 80000 | 24.472 | 24.828 | 26.506 |
 | 88000 | 24.170 | — | 26.369 |
 | 96000 | 23.774 | — | 26.260 |
 | 104000 | 24.570 | — | 26.898 |
@@ -155,6 +167,8 @@ Baselines: constant-LR plateau 24.747 dB (`plateau-272000`), annealed 24.885 dB 
 | 48000 | +0.314 | +0.979 | +1.293 | 24% |
 | 56000 | +0.345 | +1.243 | +1.588 | 22% |
 | 64000 | +0.367 | +1.430 | +1.797 | 20% |
+| 72000 | +0.369 | +1.575 | +1.943 | 19% |
+| 80000 | +0.356 | +1.678 | +2.034 | 17% |
 
 ### Total gap, learned_mix − control, at every matched step
 

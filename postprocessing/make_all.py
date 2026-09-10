@@ -6,9 +6,9 @@ stats.md is the numeric source of truth for RESULTS.md: every number quoted in t
 must appear here, and both are produced from codec/results/benchmark.jsonl plus the committed
 data/*.json. Nothing in this folder is typed in from memory.
 
-Layer-weight figures additionally need data/layer_weights.json, which extract_layer_weights.py
-writes from local checkpoints. That file is committed, so this script runs on a fresh clone; re-run
-the extractor after training more steps.
+Some figures need inputs that are not in benchmark.jsonl, written by the extract_*.py scripts from
+local checkpoints, logs or the DINO weights. Their outputs live in data/ and ARE committed, so this
+script runs on a fresh clone. Re-run extract_layer_weights.py after training more steps.
 """
 
 from __future__ import annotations

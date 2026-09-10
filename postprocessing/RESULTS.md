@@ -67,12 +67,27 @@ gap be before it means anything? Three runs of 15,299 steps — a baseline (**A*
 with the bottleneck frozen at a random projection (**B**, a published ≈1.4 dB effect), and the
 baseline again with a different seed (**C**, the noise floor).
 
+The two panels are **different quantities and deliberately not on one axis**. Left is mira's own
+validation loss over training, which is the only per-step record these three runs have — no
+intermediate checkpoints were ever scored for them. Right is PSNR of held-out reconstructions
+(2,048 frames, `eval_codec`) at the final step, which is the only step where the dB numbers exist.
+
+Colour follows the *configuration*, not the run: A and C are the same configuration, so they share
+a hue and differ by marker. Two blue curves landing far apart is the finding.
+
 - **The effect size reproduced.** A − B = **+1.4489 dB** against mira's published ≈1.4 dB (their
   table `tab:exp-bottleneck`: 29.7 learned vs 28.3 random frozen). The benchmark can see a
   bottleneck-sized change.
 - **The comparison could not resolve it.** Two runs of the *identical* configuration, differing
   only in seed, came out **1.142 dB** apart. The launcher's own criterion for calling the setup
   usable was effect > 3 × noise = 3.426 dB. Ratio achieved: **1.27×**. Verdict: **TOO NOISY**.
+- **The validation curves say the same thing independently, and slightly worse.** In loss the seed
+  gap is *larger* than the intervention: |A−C| = 0.1205 against B−A = 0.0952. Two runs of one
+  configuration differ by more than freezing the bottleneck costs.
+- **None of the three had settled.** All were still descending at the last reading, with
+  reading-to-reading wobble big enough that all three ticked *up* at step 14,535. So the endpoint
+  the dB were scored at was not a converged one — part of why the comparison was noisy is simply
+  that 15,299 steps is early. The baseline later needed **272,000**.
 
 This is the most useful negative result in the project, and it is why the protocol looks the way it
 does. Unpaired comparisons at short run lengths are worthless here. Everything after this uses

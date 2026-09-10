@@ -25,6 +25,7 @@ generated from the record, regenerable in one command.
 | `plot_*.py` | one figure each; standalone-runnable |
 | `extract_layer_weights.py` | extraction: layer weights out of the arms' checkpoints |
 | `extract_setup_facts.py` | extraction: the codec's shape and parameter counts |
+| `extract_calibration_curves.py` | extraction: validation curves out of the calibration logs |
 | `data/*.json` | small committed inputs that are not in `benchmark.jsonl` |
 | `figures/*.png` | committed, so `RESULTS.md` renders without running anything |
 
@@ -41,8 +42,9 @@ committed.
 **The two exceptions** are the extraction scripts, which need things the repo does not ship:
 
 ```bash
-pixi run python postprocessing/extract_layer_weights.py   # needs local checkpoints
-pixi run python postprocessing/extract_setup_facts.py     # needs the DINOv3 weights
+pixi run python postprocessing/extract_layer_weights.py      # needs local checkpoints
+pixi run python postprocessing/extract_calibration_curves.py # needs local training logs
+pixi run python postprocessing/extract_setup_facts.py        # needs the DINOv3 weights
 ```
 
 `extract_layer_weights.py` reads `encoder.layer_weights` out of the arms' `.pth` files —
@@ -50,6 +52,12 @@ pixi run python postprocessing/extract_setup_facts.py     # needs the DINOv3 wei
 `data/layer_weights.json` instead, which *is* committed. It records each arm's checkpoint path and
 step, so a figure drawn from stale weights is detectable rather than silent. **Re-run it after
 training more steps**, then `make_all.py`.
+
+`extract_calibration_curves.py` parses mira's validation-loss lines out of
+`checkpoints/calibration/*.log` into `data/calibration_curves.json`. It exists because
+`benchmark.jsonl` holds exactly one scored row per calibration arm — no intermediate checkpoints
+were ever scored for A/B/C — so the logs are their only per-step record. Note the output is
+validation *loss*, not PSNR, on a different sample set; the two never share an axis.
 
 `extract_setup_facts.py` constructs the codec to count parameters (including the XL decoder, to
 size the configuration that OOMs a 12GB card) and derives the compression ratio from the config
