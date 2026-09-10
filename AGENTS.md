@@ -191,6 +191,12 @@ any of these costs real time or a real bug, so they live here rather than only i
   mix roughly constant rather than letting it drift as a variant changes the latent. Worth knowing
   before suspecting it of confounding an arm-to-arm comparison: the factors are logged as
   `loss_*_auto_w` if you ever want to check rather than assume.
+- **`checkpoint_keep_recent` decides whether a run's trajectory can EVER be scored.** It defaults
+  to 1 in `codec/configs/kmira_train_codec.yaml`, so intermediate checkpoints are deleted as
+  training advances and a run scored only at the end can never be given a curve afterwards — the
+  three calibration arms are permanently one point each for exactly this reason. If a run's shape
+  might matter later, either raise `checkpoint_keep_recent` or score inline per chunk the way the
+  plateau and warm-start launchers do. Disk is the trade: each checkpoint is ~4.4GB.
 - **Calling a plateau/elbow needs several trailing readings, not one flat stretch.** This project
   has hit real false plateaus more than once — a multi-hour flat stretch followed by a further jump
   of over 1 dB. Stopping on the first flat reading has already cost real signal here.

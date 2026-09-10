@@ -10,12 +10,16 @@ A−B says whether the benchmark can SEE a bottleneck-sized change. |A−C| says
 be before it means anything. The launcher demanded A−B > 3·|A−C| to call the setup usable, and it
 did not clear that. This figure is why the protocol for everything after looks the way it does.
 
-TWO PANELS, TWO DIFFERENT QUANTITIES, deliberately not on one axis:
+WHY THIS IS ONE PANEL AND NOT TWO. The obvious figure is loss falling beside PSNR rising on a
+shared step axis. That figure cannot be drawn: these runs set `checkpoint_keep_recent: 1`, so every
+intermediate checkpoint was deleted as they advanced and PSNR exists for A/B/C at exactly one step.
+Three points is not a curve, and a panel holding them earns nothing -- so the dB go in the legend,
+beside the arm they belong to. Recovering the real curve means re-running all three arms (~6h GPU)
+with checkpoints retained, or scoring inline. Transforming the loss into something that rises would
+look like PSNR without being it, so it is not done here.
 
-* left  -- mira's validation loss over training (512 samples, from the run logs). The only per-step
-           record these arms have, and what shows whether they had settled. They had not.
-* right -- PSNR of held-out reconstructions at the final step (2048 frames, eval_codec). The dB
-           numbers everything else on the page is quoted in, and the only step where they exist.
+What is plotted is mira's own validation loss (512 samples, parsed from the run logs), which is the
+only per-step record these arms have and is what shows whether they had settled. They had not.
 
 COLOUR FOLLOWS THE CONFIGURATION, not the run: A and C are the *same* configuration differing only
 in seed, so they share a hue and are separated by marker and label. Two blue curves landing far
@@ -29,11 +33,8 @@ import json
 import matplotlib.pyplot as plt
 from lib import (
     DATA,
-    GRID,
     INK,
     INK_SOFT,
-    RECESSIVE,
-    SURFACE,
     apply_style,
     load_rows,
     save,
@@ -65,36 +66,50 @@ def build():
     n_frames = a["n_frames"]
 
     apply_style()
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.0, 4.5), gridspec_kw={"width_ratios": [1.65, 1]})
+    fig, ax = plt.subplots(figsize=(9.2, 4.7))
 
-    # ---- left: validation curves ----------------------------------------------------------------
+    # ONE panel, not two. There is no PSNR curve to put beside this one: `checkpoint_keep_recent: 1`
+    # deleted every intermediate checkpoint as these runs advanced, so PSNR exists for A/B/C at
+    # exactly one step and a panel holding three points earns nothing. The dB are folded into the
+    # legend instead, where they sit next to the identity they belong to. Faking a rising curve by
+    # transforming the loss would look like PSNR and not be it.
     for tag, label, color, marker in ARMS:
         rec = curves.get(tag)
         if not rec:
             continue
         xs = [r["step"] for r in rec["readings"]]
         ys = [r[METRIC] for r in rec["readings"]]
-        ax.plot(xs, ys, color=color, marker=marker, markersize=3.6, label=label, zorder=3)
+        ax.plot(
+            xs,
+            ys,
+            color=color,
+            marker=marker,
+            markersize=3.8,
+            label=f"{label}   —   {scored[tag]['psnr']:.3f} dB at {step:,}",
+            zorder=3,
+        )
         ax.annotate(
             f"  {label.split('  ')[0]}",
             xy=(xs[-1], ys[-1]),
             xytext=(5, 0),
             textcoords="offset points",
             va="center",
-            fontsize=9,
+            fontsize=9.5,
             fontweight="bold",
             color=color,
         )
 
     ax.set_xlabel(f"training step  (each arm ran to {step:,})")
     ax.set_ylabel("validation loss, mira's own val loop\n(512 samples)  ↓ better")
-    ax.set_title("None of the three had settled", loc="left")
-    ax.set_xlim(-400, max(r["step"] for r in curves["A_baseline"]["readings"]) * 1.10)
-    ax.legend(loc="upper right", fontsize=8.5)
+    ax.set_title("Three calibration runs: none had settled, and two of them are the same config", loc="left")
+    ax.set_xlim(-400, max(r["step"] for r in curves["A_baseline"]["readings"]) * 1.09)
+    leg = ax.legend(loc="upper right", fontsize=8.5, title="arm   —   final PSNR, 2048 held-out frames")
+    leg.get_title().set_fontsize(8)
+    leg.get_title().set_color(INK_SOFT)
     ax.annotate(
         "A and C are the SAME configuration — only the seed differs.\n"
-        "In this metric they separate by MORE than the frozen\nbottleneck costs.",
-        xy=(0.30, 0.62),
+        "In this metric they separate by MORE than the frozen bottleneck costs.",
+        xy=(0.17, 0.62),
         xycoords="axes fraction",
         fontsize=8.5,
         color=INK_SOFT,
@@ -103,49 +118,6 @@ def build():
     thousands(ax)
     spines(ax)
 
-    # ---- right: final scored PSNR, dB on the y axis ---------------------------------------------
-    lo, hi = min(a["psnr"], c["psnr"]), max(a["psnr"], c["psnr"])
-    ax2.axhspan(lo, hi, color=RECESSIVE, alpha=0.6, zorder=1)
-    ax2.annotate(
-        f"seed spread\n{noise:.2f} dB",
-        xy=(2.44, (lo + hi) / 2),
-        ha="right",
-        va="center",
-        fontsize=8,
-        color=INK_SOFT,
-    )
-    for i, (tag, label, color, marker) in enumerate(ARMS):
-        r = scored[tag]
-        ax2.plot(
-            [i],
-            [r["psnr"]],
-            marker=marker,
-            markersize=10,
-            color=color,
-            zorder=4,
-            markeredgecolor=SURFACE,
-            markeredgewidth=2,
-        )
-        ax2.annotate(
-            f"{r['psnr']:.3f}",
-            xy=(i, r["psnr"]),
-            xytext=(0, 11),
-            textcoords="offset points",
-            ha="center",
-            fontsize=8.5,
-            fontweight="bold",
-            color=color,
-        )
-    ax2.set_xticks(range(len(ARMS)))
-    ax2.set_xticklabels([label.split("  ")[0] for _, label, _, _ in ARMS], fontsize=9.5)
-    ax2.set_xlim(-0.55, 2.5)
-    ax2.set_ylim(min(r["psnr"] for r in (a, b, c)) - 0.45, hi + 0.60)
-    ax2.set_ylabel(f"PSNR of held-out reconstructions\nat step {step:,} ({n_frames} frames), dB  ↑ better")
-    ax2.set_title("...and the dB they were scored at", loc="left")
-    ax2.grid(axis="x", visible=False)
-    ax2.grid(axis="y", color=GRID, alpha=0.7)
-    spines(ax2)
-
     fig.suptitle(
         "Why every experiment here is long and paired",
         x=0.008,
@@ -153,15 +125,15 @@ def build():
         fontsize=11.5,
         fontweight="bold",
     )
-    fig.tight_layout(rect=(0, 0.10, 1, 0.94))
+    fig.tight_layout(rect=(0, 0.13, 1, 0.94))
     fig.text(
         0.012,
         0.025,
-        f"effect A−B = {effect:+.2f} dB, reproducing the published ≈{expected:.1f} dB — but only "
-        f"{effect / noise:.2f}× the seed spread. The launcher required {3 * noise:.2f} dB "
-        f"(3× noise) to call the setup usable.\nVERDICT at this length: TOO NOISY. Hence long runs, "
-        "and arms paired on one warm start and one seed schedule so the spread cancels rather than "
-        "being averaged over.",
+        f"In PSNR: effect A−B = {effect:+.2f} dB, reproducing the published ≈{expected:.1f} dB — but "
+        f"only {effect / noise:.2f}× the seed spread |A−C| = {noise:.2f} dB. The launcher required "
+        f"{3 * noise:.2f} dB (3× noise) to call the setup usable.\nVERDICT at this length: TOO NOISY. "
+        "Hence long runs, and arms paired on one warm start and one seed schedule so the spread "
+        "cancels rather than being averaged over.",
         fontsize=8.5,
         color=INK,
         va="bottom",

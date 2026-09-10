@@ -67,13 +67,18 @@ gap be before it means anything? Three runs of 15,299 steps — a baseline (**A*
 with the bottleneck frozen at a random projection (**B**, a published ≈1.4 dB effect), and the
 baseline again with a different seed (**C**, the noise floor).
 
-The two panels are **different quantities and deliberately not on one axis**. Left is mira's own
-validation loss over training, which is the only per-step record these three runs have — no
-intermediate checkpoints were ever scored for them. Right is PSNR of held-out reconstructions
-(2,048 frames, `eval_codec`) at the final step, which is the only step where the dB numbers exist.
+**Why there is no dB curve here.** The natural figure would be loss falling beside PSNR rising on
+a shared step axis. It cannot be drawn: these runs used `checkpoint_keep_recent: 1`, so every
+intermediate checkpoint was deleted as they advanced, and PSNR for A/B/C exists at exactly one
+step. So what is plotted is mira's own validation loss — the only per-step record these arms have —
+with each arm's single final dB reading folded into the legend beside the arm it belongs to.
+Recovering the real PSNR curve means re-running all three arms (~6h of GPU) with checkpoints
+retained. Transforming the loss into something that rises would look like PSNR without being it,
+so it is not done.
 
 Colour follows the *configuration*, not the run: A and C are the same configuration, so they share
-a hue and differ by marker. Two blue curves landing far apart is the finding.
+a hue and differ by marker. Two blue curves landing far apart, with the orange intervention
+*between* them, is the finding.
 
 - **The effect size reproduced.** A − B = **+1.4489 dB** against mira's published ≈1.4 dB (their
   table `tab:exp-bottleneck`: 29.7 learned vs 28.3 random frozen). The benchmark can see a
