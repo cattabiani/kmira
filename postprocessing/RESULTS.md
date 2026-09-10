@@ -39,6 +39,35 @@ Every score on this page post-dates the eval and sampling fixes that made it tru
 are in [`../CHANGELOG.md`](../CHANGELOG.md) and the gotcha list in
 [`../AGENTS.md`](../AGENTS.md) rather than here.
 
+### The runs referred to on this page
+
+Seven runs appear below and several of them are the same configuration at different lengths, so
+they are named here once and by those names throughout.
+
+| name | what it is | length | LR |
+|---|---|---|---|
+| **A** | calibration arm: the baseline configuration | 15,299 | cosine to 1e-6 |
+| **B** | calibration arm: same, bottleneck frozen at a random projection | 15,299 | cosine to 1e-6 |
+| **C** | calibration arm: same as A, different seed | 15,299 | cosine to 1e-6 |
+| **the baseline run** | the same baseline configuration as A, run to its elbow | 272,000 | constant 1e-4 |
+| **the anneal** | the baseline run's final phase, producing `checkpoint-304000` | +32,000 | cosine to 1e-6 |
+| **`control`, `learn7`, `learned_mix`** | the three warm-start arms of Experiments 1 and 2, all started from `checkpoint-304000` | 200,000 each | constant 1e-4 |
+
+Two conventions that matter for reading the sections below:
+
+- **A, B and C are the *calibration* arms; `control`, `learn7` and `learned_mix` are the
+  *warm-start* arms.** They are different studies. Where the word "arm" appears alone it is
+  qualified.
+- **A and the baseline run are the same configuration**, differing only in how long they ran and
+  on what LR schedule. That is what makes some comparisons between them tempting and wrong — see
+  0b.
+
+Two shorthands for readings rather than runs: **"the plateau"** is the baseline run's final
+constant-LR reading, **24.747 dB** at step 272,000, and **"the annealed baseline"** is 24.885 at
+304,000. Warm-start arms are read against the former — 0c says why.
+
+Per-run seeds, schedules and reading counts are in [`stats.md`](stats.md).
+
 ### 0a. A deliberately smaller codec, scoped to one consumer GPU
 
 mira's codec is a frozen DINOv3-L/16 feature extractor → a learned linear bottleneck → a ViT
@@ -91,7 +120,7 @@ What is plotted is mira's own validation loss, the per-step record these three a
 arm's final dB reading in the legend beside the arm it belongs to. These were the first runs in the
 project and they ran under the stock `checkpoint_keep_recent: 1`, so one checkpoint per arm
 survived and the dB are endpoints rather than curves. Every run after this one keeps its
-checkpoints and is scored densely — the plateau baseline has 34 PSNR readings, each warm-start arm
+checkpoints and is scored densely — the baseline run has 34 PSNR readings, each warm-start arm
 25 — so this is the only figure on the page without a dB curve, and both quantities agree here
 anyway.
 
@@ -113,17 +142,19 @@ a hue and differ by marker. Two blue curves landing far apart, with the orange i
   five readings against −0.0723 over the first half), so on the curve alone these look settled. But
   that residual slope is smaller than the reading-to-reading wobble in every arm — the last six
   readings span 0.037–0.050 — so the curve cannot tell you whether the descent has stopped, and all
-  three ticked *up* at the final reading. What settles it is that the same baseline configuration,
-  run long, sits in the same flat band (loss 0.6427–0.6988 over its own steps 9k–20k) and then runs
-  to step **304,000**, ending at 0.2076: **39% of its entire descent** was still ahead of it, worth
-  **4.762 dB** of PSNR. Flat at 15,000 steps is not converged at 15,000 steps.
+  three ticked *up* at the final reading. What settles it is **the baseline run** — A's configuration
+  taken to 272,000 steps. It sits in the same flat band over its own steps 9k–20k (loss
+  0.6427–0.6988) and then keeps going to 0.2076: **39% of its entire descent** was still ahead of
+  it at the point A, B and C stopped, worth **4.762 dB** of PSNR. Flat at 15,000 steps is not
+  converged at 15,000 steps.
 
-**A tempting substitute that does not work.** The plateau run (0c) is the same baseline
-configuration, cold-started and scored from step 8,000, and its reading at 16,000 (20.123 dB) sits
-almost exactly on A's 20.105 at 15,299 — so it looks like a free third replicate of the baseline
-seed. It is not comparable. The calibration arms ran a full cosine decay to 1e-6 across their
-15,300 steps and therefore finished *annealed*, while the plateau run was mid-constant-LR at 1e-4.
-Different schedules at the same step; the near-agreement is a coincidence, not evidence.
+**A tempting substitute that does not work.** Since A and **the baseline run** (0c) are the same
+configuration, the baseline run looks like a free extra replicate of A — and its reading at step
+16,000, **20.123 dB**, sits almost exactly on **A's 20.105** at 15,299. Treating that as a second
+measurement of the noise floor would be wrong. A finished *annealed*, having cosine-decayed to
+1e-6 across its 15,300 steps; the baseline run was still mid-flight at a constant 1e-4 at its
+16,000. Same configuration and nearly the same step, but different learning rates, so the
+near-agreement is a coincidence and not a replicate.
 
 This is the most useful negative result in the project, and it is why the protocol looks the way it
 does. Unpaired comparisons at short run lengths are worthless here. Everything after this uses
@@ -167,12 +198,12 @@ Training runs in hourly chunks of 8,000 steps, and each chunk resolves its own s
 chunk's seed selects the entire 8,000-step stream that chunk trains on. **The seed is an identity
 for a slice of data**, and the same seed means the same slice in every run on this schedule.
 
-That makes the two flat stretches testable, because the plateau run and the warm-start arms met the
+That makes the two flat stretches testable, because the baseline run and the warm-start arms met the
 same seeds at different step numbers and at very different maturity. If a stretch belongs to
 training dynamics it tracks the step; if it belongs to the data it tracks the seed. It tracks the
 seed:
 
-| chunk seed | plateau run | control | what 0c called it |
+| chunk seed | the baseline run | `control` | what 0c called it |
 |---|---|---|---|
 | 36–39 | +0.157 … +0.092 | −0.080 … −0.396 | first "false plateau" |
 | **40** | **+1.308** | **+0.795** | the jump that ended it |
@@ -181,7 +212,7 @@ seed:
 
 Seed 40's slice is the single best chunk of both runs. Seed 50's is the best chunk from seed 45
 onward in **all three** runs that reached it (1/18, 1/8 and 1/8). Seeds 36–39 and 47–49 are the
-worst in both — and the plateau run met them 100,000+ steps away from where the control did. Full
+worst in both — and the baseline run met them 100,000+ steps away from where `control` did. Full
 table in [`stats.md`](stats.md).
 
 So the caution in 0c stands but its explanation was wrong: those were not the optimiser stalling
@@ -195,7 +226,7 @@ and breaking free, they were four poor data slices followed by a good one, twice
   other chunk for chunk.
 
 One stretch is *not* evidence about data: the warm-start arms' first three chunks (seeds 29–31)
-fall and rebound because a warm start resets the optimiser and raises the LR. The plateau run never
+fall and rebound because a warm start resets the optimiser and raises the LR. The baseline run never
 used those seeds, so there is no cross-run check, and the figure marks them separately.
 
 ---
@@ -219,7 +250,7 @@ arm-to-arm gap is the number this design supports.
 Two things visible in the figure that are easy to miss in a table:
 
 - **Both arms dip through 72k–96k and recover at 104k.** Those are chunk seeds 36–39 and 40, and
-  section 0d shows the same seeds doing the same thing in the plateau run at a different point in
+  section 0d shows the same seeds doing the same thing in the baseline run at a different point in
   training. The shape is the data schedule, not the intervention. It is why the control had to be
   run to full length: before it was, the variant's jump at 104k looked like it might be the idea.
 - **The control keeps creeping up.** Constant LR was still buying roughly +0.03 dB per 8k steps out

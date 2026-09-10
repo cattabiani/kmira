@@ -53,7 +53,7 @@ Captured by `extract_run_metadata.py`. `benchmark.jsonl` holds the scored PSNR r
 - `warmstart_control vs warmstart_learned_mix`: 25 shared seeds, identical over the shared range: **True**
 - `warmstart_control vs warmstart_learn7`: 11 shared seeds, identical over the shared range: **True**
 
-Note `plateau_baseline` reads as mixed because `run_anneal.sh` continues into the plateau run's own output directory, so that log holds both the constant-LR chunks and the cosine ones.
+Note `plateau_baseline` (RESULTS.md calls it *the baseline run*) reads as mixed because `run_anneal.sh` continues into that run's own output directory, so the log holds both its constant-LR chunks and the cosine ones.
 
 
 ---
@@ -96,7 +96,7 @@ Slopes are loss per 1,000 steps; negative is improving.
 
 Each arm's trailing trend is roughly an order of magnitude shallower than its opening one, so on the curve alone these look converged. But the residual slope over the last five readings is smaller than the spread of the last six in every arm, so the trend is inside the noise and the curve cannot tell you whether it has stopped. All three ticked *up* at the final reading.
 
-And flatness there would have meant nothing anyway. The same baseline configuration, run long, sits in the same flat band over steps 9k–20k of its own trace (loss 0.6427–0.6988, spread 0.0561) — and then runs to step 304,000, ending at 0.2076. Sitting in that band it still had 0.4912 of loss to shed, **39% of its entire descent** from 1.4550.
+And flatness there would have meant nothing anyway. The baseline run — A's configuration taken to 272,000 steps — sits in the same flat band over steps 9k–20k of its own trace (loss 0.6427–0.6988, spread 0.0561) — and then runs to step 304,000, ending at 0.2076. Sitting in that band it still had 0.4912 of loss to shed, **39% of its entire descent** from 1.4550.
 
 In the metric the page is actually about, that band is 4.762 dB short of where the run ends: 20.123 dB at step 16,000 against 24.885 at step 304,000.
 
@@ -164,7 +164,7 @@ In the metric the page is actually about, that band is 4.762 dB short of where t
 
 PSNR gained during the chunk trained with each seed. A chunk's seed picks its entire 8,000-step stream, so the same seed is the same slice of data in every run using this schedule — and the runs met these seeds at different step numbers.
 
-| chunk seed | plateau baseline | control | learn7 | learned_mix |
+| chunk seed | the baseline run | control | learn7 | learned_mix |
 |---|---|---|---|---|
 | 28 | +0.098 | — | — | — |
 | 29 | — | -0.333 | -0.257 | -0.211 |
@@ -202,12 +202,12 @@ PSNR gained during the chunk trained with each seed. A chunk's seed picks its en
 | 61 | +0.047 | — | — | — |
 | 62 | +0.010 | — | — | — |
 
-- **seed 40**: plateau baseline +1.308, control +0.795, learned_mix +0.638 dB. Rank among that run's chunks: plateau baseline 1/28, control 1/24, learned_mix 2/24.
-- **seed 50**: plateau baseline +0.178, control +0.113, learned_mix +0.143 dB. Rank among that run's chunks: plateau baseline 3/28, control 5/24, learned_mix 8/24; among seeds 45+ only: plateau baseline 1/18, control 1/8, learned_mix 1/8.
-- **seeds 36–39**: plateau baseline +0.092..+0.157, control -0.396..-0.080, learn7 -0.279..-0.079, learned_mix -0.137..+0.066 dB.
-- **seeds 47–49**: plateau baseline +0.011..+0.024, control -0.024..-0.006, learned_mix +0.006..+0.049 dB.
+- **seed 40**: the baseline run +1.308, control +0.795, learned_mix +0.638 dB. Rank among that run's chunks: the baseline run 1/28, control 1/24, learned_mix 2/24.
+- **seed 50**: the baseline run +0.178, control +0.113, learned_mix +0.143 dB. Rank among that run's chunks: the baseline run 3/28, control 5/24, learned_mix 8/24; among seeds 45+ only: the baseline run 1/18, control 1/8, learned_mix 1/8.
+- **seeds 36–39**: the baseline run +0.092..+0.157, control -0.396..-0.080, learn7 -0.279..-0.079, learned_mix -0.137..+0.066 dB.
+- **seeds 47–49**: the baseline run +0.011..+0.024, control -0.024..-0.006, learned_mix +0.006..+0.049 dB.
 
-The plateau run spent its first seven chunks (steps 0–56,000) on seed 28 — the same slice replayed seven times, before the per-chunk seed schedule existed. Fresh seeds begin at its step 64,000, which is why it has no reading for seeds 29–35.
+The baseline run spent its first seven chunks (steps 0–56,000) on seed 28 — the same slice replayed seven times, before the per-chunk seed schedule existed. Fresh seeds begin at its step 64,000, which is why it has no reading for seeds 29–35.
 
 
 ---

@@ -133,9 +133,9 @@ def run_metadata_table() -> str:
         )
     lines.append("")
     lines.append(
-        "Note `plateau_baseline` reads as mixed because `run_anneal.sh` continues into "
-        "the plateau run's own output directory, so that log holds both the constant-LR "
-        "chunks and the cosine ones.\n"
+        "Note `plateau_baseline` (RESULTS.md calls it *the baseline run*) reads as mixed "
+        "because `run_anneal.sh` continues into that run's own output directory, so the log "
+        "holds both its constant-LR chunks and the cosine ones.\n"
     )
     return "\n".join(lines)
 

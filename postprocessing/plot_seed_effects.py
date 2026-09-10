@@ -6,18 +6,18 @@ is not checkpointed, so a chunk's seed picks the entire 8,000-step stream that c
 The seed is therefore an identity for a slice of data, and the same seed means the same slice in
 every run that uses this schedule.
 
-That makes a test possible. The plateau run and the warm-start arms hit the same seeds at
+That makes a test possible. The baseline run and the warm-start arms hit the same seeds at
 DIFFERENT step numbers and at very different training maturity. If a dip belongs to training
 dynamics, it should track the step. If it belongs to the data, it should track the seed. Plot the
 per-chunk PSNR increment against the seed and the answer is direct.
 
-WHY THIS MATTERS BEYOND THE DIP. Section 0c originally read the plateau run's two flat stretches
+WHY THIS MATTERS BEYOND THE DIP. Section 0c originally read the baseline run's two flat stretches
 as false plateaus in the optimisation -- the project's own cautionary tale about calling an elbow
 too early. Both stretches, and both of the jumps that ended them, are seed-aligned and reproduce in
-the control arm 100k+ steps away from where the plateau run saw them. The caution survives, but the
+the control arm 100k+ steps away from where the baseline run saw them. The caution survives, but the
 cause was the seed schedule.
 
-Plateau is drawn as a gray reference rather than a fourth categorical hue: it is the baseline the
+The baseline run is drawn as a gray reference rather than a fourth categorical hue: it is the baseline the
 arms are read against, not another arm, and the palette's three slots are spoken for.
 """
 
@@ -43,16 +43,19 @@ from lib import (
 
 PLATEAU_C = "#6f6e69"  # gray: a reference series, deliberately not a categorical hue
 RUNS = [
-    ("plateau_baseline", "plateau", "plateau baseline", PLATEAU_C),
+    ("plateau_baseline", "plateau", "the baseline run", PLATEAU_C),
     ("warmstart_control", "control", "control", COLOR["control"]),
     ("warmstart_learn7", "learn7", "learn7", COLOR["learn7"]),
     ("warmstart_learned_mix", "learned_mix", "learned_mix", COLOR["learned_mix"]),
+    # Labels are the names RESULTS.md's run glossary uses. "the baseline run" is the 272k-step
+    # constant-LR baseline, NOT one of the A/B/C calibration arms -- a distinction the page had
+    # blurred, since A is the same configuration at 15,299 steps.
 ]
 # The two stretches section 0c called false plateaus, and the two seeds that ended them.
 POOR = [(36, 39), (47, 49)]
 GOOD = [40, 50]
 # The warm-start arms' first three chunks are their post-restart transient: the optimiser state was
-# reset and the LR raised again, so they fall and climb back regardless of data. The plateau run
+# reset and the LR raised again, so they fall and climb back regardless of data. The baseline run
 # never used these seeds, so there is no cross-run corroboration and they are NOT evidence about
 # the data. Marked on the figure so the big seed-31 rebound cannot be misread as a seed effect.
 RESTART = (29, 31)
@@ -107,7 +110,7 @@ def build():
     # other so closely for the whole run that no position separates them -- which is itself worth
     # saying, so it is said instead of being worked around.
     ax.annotate(
-        "plateau baseline",
+        "the baseline run",
         xy=(58, deltas["plateau_baseline"].get(58, 0)),
         xytext=(0, 10),
         textcoords="offset points",
@@ -157,7 +160,7 @@ def build():
             va="center",
         )
     ax.annotate(
-        "warm-restart transient,\nnot data — the plateau run\nnever used these seeds",
+        "warm-restart transient,\nnot data — the baseline run\nnever used these seeds",
         xy=(28.7, top * 0.92),
         fontsize=7.6,
         color="#a2603a",
@@ -190,7 +193,7 @@ def build():
         0.012,
         0.02,
         "A chunk's seed picks its whole 8,000-step stream, so the seed identifies a slice of data. "
-        "The plateau run met these seeds at different steps and\ndifferent maturity from the "
+        "The baseline run met these seeds at different steps and\ndifferent maturity from the "
         "warm-start arms, so a dip that tracks the seed rather than the step belongs to the data, "
         "not to the optimiser.",
         fontsize=8.5,
@@ -256,7 +259,7 @@ def stats_for(deltas: dict[str, dict[int, float]]) -> str:
         lines.append(f"- **seeds {lo}–{hi}**: " + ", ".join(poor_note) + " dB.")
         poor_note = []
     lines.append(
-        "\nThe plateau run spent its first seven chunks (steps 0–56,000) on seed 28 — the same "
+        "\nThe baseline run spent its first seven chunks (steps 0–56,000) on seed 28 — the same "
         "slice replayed seven times, before the per-chunk seed schedule existed. Fresh seeds begin "
         "at its step 64,000, which is why it has no reading for seeds 29–35.\n"
     )

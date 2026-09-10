@@ -108,8 +108,9 @@ def settling_stats(curves, scored) -> str:
         remaining = max(band) - last[METRIC]
         total = first[METRIC] - last[METRIC]
         lines.append(
-            f"And flatness there would have meant nothing anyway. The same baseline configuration, "
-            f"run long, sits in the same flat band over steps 9k–20k of its own trace "
+            f"And flatness there would have meant nothing anyway. The baseline run — A's "
+            f"configuration taken to 272,000 steps — sits in the same flat band over steps 9k–20k "
+            f"of its own trace "
             f"(loss {min(band):.4f}–{max(band):.4f}, spread {max(band) - min(band):.4f}) — and then "
             f"runs to step {last['step']:,}, ending at {last[METRIC]:.4f}. Sitting in that band it "
             f"still had {remaining:.4f} of loss to shed, **{remaining / total:.0%} of its entire "
