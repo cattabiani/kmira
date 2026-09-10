@@ -97,10 +97,22 @@ so a `learn7` stopped early would understate whichever component it measures.
 **Pre-registered outcomes** are in that NOTES.md and were written before the run. Read them there
 rather than deciding after the fact.
 
-### 2. Experiment 3, cold start (see `experiments/2026-09-08-cold-start-layer-mix/NOTES.md`)
+### 2. Experiment 4, latent predictability (see `experiments/2026-09-10-latent-predictability/NOTES.md`)
 
-Queued behind 1. Its comparison arm already exists, since the locked baseline is itself a
-cold-start run under the same protocol.
+**Cheapest experiment on the list and the only one that addresses the open question**, so it ranks
+above Experiment 3 despite being written later. Nothing is retrained: the three arms stay frozen
+and a small next-step predictor is fitted on the latents they already produce, as evaluation
+apparatus. An afternoon, against ~25 h of GPU for a training arm.
+
+It measures the property the reframing above turns on — whether the layer-0 latent is
+disproportionately harder to predict than mira's deep-ish one. Read `FVU` only alongside PSNR: a
+codec that encodes nothing is perfectly predictable, so the result is a point in
+`(PSNR, FVU)` space and the question is whether `learned_mix` moved along a frontier or off it.
+
+### 3. Experiment 3, cold start (see `experiments/2026-09-08-cold-start-layer-mix/NOTES.md`)
+
+Its comparison arm already exists, since the locked baseline is itself a cold-start run under the
+same protocol. ~35 h of GPU for the plateau alone, which is why it sits behind the probe.
 
 ## Conventions worth preserving
 

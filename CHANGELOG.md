@@ -240,6 +240,30 @@ This turns "does the gain survive downstream?" from an open shrug into a directi
 predicts not. Still untestable in this rig, but it is a prediction now, and `learn7` landing near
 `control` would be consistent with it.
 
+## 2026-09-10 — Pre-register Experiment 4: latent predictability
+
+The reframing above (mira's layer set as a regularizer, not a hyperparameter) predicts the
+shallow latent should be harder for a world model to predict. That is an argument. This
+pre-registers the measurement — the part of it reachable without a world model.
+
+A **probe**, not a training change: the three arms stay frozen, and a small next-step predictor is
+fitted on the latents they already produce, purely as evaluation apparatus. Metric is fraction of
+variance unexplained, standardized per channel because the arms' latent scales are not comparable
+(the aggregation/projection scaling symmetry resolves arbitrarily under weight decay). An afternoon
+of work against ~25 h of GPU for a training arm, and it ranks above Experiment 3 for that reason.
+
+The design's own trap is written into the pre-registration: **predictability alone is maximised by
+a constant latent**, so FVU is meaningless without PSNR beside it. The arms genuinely carry
+different amounts of information — `learned_mix` encodes more high-frequency detail, which is
+inherently less predictable — so the question is not "is FVU higher" but whether `learned_mix`
+moved *along* a fidelity/predictability frontier or *off* it.
+
+Deliberately **not** pre-registered: the version that moves the predictor from evaluation into the
+codec's training loss (a predictive information bottleneck — the principled form of what mira's
+layer prior approximates). It only makes sense if the probe shows the arms differ, and its design
+depends on how. Pre-registering it now would mean fixing a design before the measurement that
+motivates it exists.
+
 ## 2026-08-26 — Publishing pass
 
 Removed every hardcoded `/home/katta`-style path in favor of `direnv` (`.envrc`) plus two env vars
