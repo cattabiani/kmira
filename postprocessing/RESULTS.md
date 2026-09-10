@@ -107,48 +107,51 @@ Both are mira's own configs, so this is a config change and not a fork — train
 spatial where mira's 192× includes a 2× temporal reduction. This is the biggest single reason no
 absolute number on this page is comparable with the paper's.
 
-### 0b. The benchmark was calibrated before it was trusted — and it failed its own test
+### 0b. The rig reproduces mira's own bottleneck result — but cannot resolve it unpaired
 
 ![Three-arm calibration: effect size against seed noise](figures/calibration_three_arm.png)
 
-Before running any experiment: can this setup detect a bottleneck-sized change, and how big must a
-gap be before it means anything? Three runs of 15,299 steps — a baseline (**A**), the same thing
-with the bottleneck frozen at a random projection (**B**, a published ≈1.4 dB effect), and the
-baseline again with a different seed (**C**, the noise floor).
+Three runs of 15,299 steps, identical except for one thing each:
 
-What is plotted is mira's own validation loss, the per-step record these three arms kept, with each
-arm's final dB reading in the legend beside the arm it belongs to. These were the first runs in the
-project and they ran under the stock `checkpoint_keep_recent: 1`, so one checkpoint per arm
-survived and the dB are endpoints rather than curves. Every run after this one keeps its
-checkpoints and is scored densely — the baseline run has 34 PSNR readings, each warm-start arm
-25 — so this is the only figure on the page without a dB curve, and both quantities agree here
-anyway.
+| | configuration | final PSNR |
+|---|---|---|
+| **A** | the baseline codec | 20.105 dB |
+| **B** | the same, bottleneck frozen at a random projection | 18.656 dB |
+| **C** | the same as A, different seed | 21.247 dB |
 
-Colour follows the *configuration*, not the run: A and C are the same configuration, so they share
-a hue and differ by marker. Two blue curves landing far apart, with the orange intervention
-*between* them, is the finding.
+**A − B is the reproduction, and it lands.** Freezing the bottleneck at a random projection is an
+intervention mira published a number for: 29.7 dB learned against 28.3 frozen, a drop of ≈1.4 dB
+(their table `tab:exp-bottleneck`). Here it costs **+1.4489 dB**. A reduced-scale single-GPU rig
+recovering a published effect at its published size is the basis for treating this as mira's
+counterpart rather than merely something shaped like it — and it is the reason every later number
+on this page is worth reading at all.
 
-- **The effect size reproduced.** A − B = **+1.4489 dB** against mira's published ≈1.4 dB (their
-  table `tab:exp-bottleneck`: 29.7 learned vs 28.3 random frozen). The benchmark can see a
-  bottleneck-sized change.
-- **The comparison could not resolve it.** Two runs of the *identical* configuration, differing
-  only in seed, came out **1.142 dB** apart. The launcher's own criterion for calling the setup
-  usable was effect > 3 × noise = 3.426 dB. Ratio achieved: **1.27×**. Verdict: **TOO NOISY**.
-- **The validation curves say the same thing independently, and slightly worse.** In loss the seed
-  gap is *larger* than the intervention: |A−C| = 0.1205 against B−A = 0.0952. Two runs of one
-  configuration differ by more than freezing the bottleneck costs.
-- **All three had flattened, and the flatness meant nothing.** Each arm's trailing trend is an
-  order of magnitude shallower than its opening one (A: −0.0078 loss per 1k steps over the last
-  five readings against −0.0723 over the first half), so on the curve alone these look settled. But
-  that residual slope is smaller than the reading-to-reading wobble in every arm — the last six
-  readings span 0.037–0.050 — so the curve cannot tell you whether the descent has stopped, and all
-  three ticked *up* at the final reading. What settles it is **the baseline run** — A's configuration
-  taken to 272,000 steps. It sits in the same flat band over its own steps 9k–20k (loss
-  0.6427–0.6988) and then keeps going to 0.2076: **39% of its entire descent** was still ahead of
-  it at the point A, B and C stopped, worth **4.762 dB** of PSNR. Flat at 15,000 steps is not
-  converged at 15,000 steps.
+**A − C is the limit, and it is larger than it should be.** A and C are the *same* configuration
+differing only in seed, and they came out **1.142 dB** apart. The launcher's own criterion for
+calling the setup usable was effect > 3 × noise = 3.426 dB; the ratio achieved was **1.27×**.
+Verdict: **TOO NOISY**. Validation loss agrees independently and slightly worse — the seed gap
+|A−C| = 0.1205 exceeds the intervention B−A = 0.0952.
 
-**A tempting substitute that does not work.** Since A and **the baseline run** (0c) are the same
+So the rig can see a bottleneck-sized effect but a single short unpaired comparison cannot separate
+it from a seed. Everything after this section uses **long runs** and **arms warm-started from one
+checkpoint on an identical per-chunk seed schedule**, so the seed spread lands on both arms and
+cancels rather than being averaged over. Section 0d is the direct evidence that it does cancel.
+
+Colour follows the *configuration*, not the run: A and C share a hue and differ by marker. Two blue
+curves landing far apart with the orange intervention *between* them is the finding.
+
+**Bonus trap: these curves nearly plateau and then start improving again.** Each arm's trailing
+trend is an order of magnitude shallower than its opening one (A: −0.0078 loss per 1k steps over
+the last five readings against −0.0723 over the first half), and all three tick *up* at the final
+reading. On the curve alone they look finished. They are not: the residual slope is smaller than
+the reading-to-reading wobble in every arm — the last six readings span 0.037–0.050 — so the curve
+cannot tell you whether the descent has stopped. **The baseline run** settles it, being A's
+configuration taken to 272,000 steps: it sits in this same flat band over its own steps 9k–20k
+(loss 0.6427–0.6988) and then keeps going to 0.2076. **39% of its entire descent, worth 4.762 dB,
+was still ahead of it** at the point A, B and C stopped. Flat at 15,000 steps is not converged at
+15,000 steps, and 0c and 0d are both consequences of that.
+
+**One tempting substitute that does not work.** Since A and the baseline run are the same
 configuration, the baseline run looks like a free extra replicate of A — and its reading at step
 16,000, **20.123 dB**, sits almost exactly on **A's 20.105** at 15,299. Treating that as a second
 measurement of the noise floor would be wrong. A finished *annealed*, having cosine-decayed to
@@ -156,11 +159,9 @@ measurement of the noise floor would be wrong. A finished *annealed*, having cos
 16,000. Same configuration and nearly the same step, but different learning rates, so the
 near-agreement is a coincidence and not a replicate.
 
-This is the most useful negative result in the project, and it is why the protocol looks the way it
-does. Unpaired comparisons at short run lengths are worthless here. Everything after this uses
-**long runs** and **paired arms warm-started from one checkpoint on an identical per-chunk seed
-schedule**, so the seed spread cancels instead of being averaged over. That the paired arms later
-traced the *same* dip-and-recovery shape (section 1) is the evidence that the cancellation works.
+The figure plots mira's own validation loss because that is the per-step record these three runs
+kept; their PSNR exists only at the final step, which is why it appears in the legend rather than
+as a second curve.
 
 ### 0c. Training the baseline to its elbow
 

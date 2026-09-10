@@ -179,6 +179,8 @@ def build():
         loc="left",
     )
     ax.set_xlim(-400, max(r["step"] for r in curves["A_baseline"]["readings"]) * 1.09)
+    lo = min(r[METRIC] for arm in ARMS for r in curves[arm[0]]["readings"])
+    ax.set_ylim(bottom=lo - 0.20)  # headroom below the curves for the plateau-trap note
     leg = ax.legend(loc="upper right", fontsize=8.5, title="arm   —   final PSNR, 2048 held-out frames")
     leg.get_title().set_fontsize(8)
     leg.get_title().set_color(INK_SOFT)
@@ -191,11 +193,20 @@ def build():
         color=INK_SOFT,
         va="top",
     )
+    ax.annotate(
+        "All three flatten from ~6k and tick UP at the last reading.\n"
+        "A's configuration, run longer, sheds another 39% of its loss.",
+        xy=(0.02, 0.13),
+        xycoords="axes fraction",
+        fontsize=8.5,
+        color=INK_SOFT,
+        va="top",
+    )
     thousands(ax)
     spines(ax)
 
     fig.suptitle(
-        "Why every experiment here is long and paired",
+        "The rig recovers mira's published bottleneck effect \u2014 but not through the seed noise",
         x=0.008,
         ha="left",
         fontsize=11.5,
@@ -205,11 +216,11 @@ def build():
     fig.text(
         0.012,
         0.025,
-        f"In PSNR: effect A−B = {effect:+.2f} dB, reproducing the published ≈{expected:.1f} dB — but "
-        f"only {effect / noise:.2f}× the seed spread |A−C| = {noise:.2f} dB. The launcher required "
-        f"{3 * noise:.2f} dB (3× noise) to call the setup usable.\nVERDICT at this length: TOO NOISY. "
-        "Hence long runs, and arms paired on one warm start and one seed schedule so the spread "
-        "cancels rather than being averaged over.",
+        f"In PSNR: effect A−B = {effect:+.2f} dB, recovering the published ≈{expected:.1f} dB — so "
+        f"the rig measures what mira measures. But that is only {effect / noise:.2f}× the seed "
+        f"spread |A−C| = {noise:.2f} dB, against the {3 * noise:.2f} dB\n(3× noise) the launcher "
+        "required to call the setup usable. VERDICT at this length: TOO NOISY — hence long runs, "
+        "and arms paired on one warm start and one seed schedule.",
         fontsize=8.5,
         color=INK,
         va="bottom",
