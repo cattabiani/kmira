@@ -5,8 +5,13 @@ checkpoint this curve ends at. It is also the evidence for the project's most ex
 this run hit TWO stretches that looked like convergence and were not.
 
 Top panel is scored PSNR. Bottom panel is the per-reading increment, which is what makes "flat"
-falsifiable: a stretch near zero followed by a jump is a false plateau, and reading only the top
-panel is how you stop in one.
+falsifiable: a stretch near zero followed by a jump is an apparent plateau, and reading only the
+top panel is how you stop in one.
+
+Both stretches were later traced to the per-chunk seed schedule -- the same seeds stall and
+unstall the warm-start arms 100k+ steps away (see plot_seed_effects.py). This figure is still the
+right one for "do not call an elbow on one flat stretch"; it just is not evidence about the
+optimiser. The annotations say "apparent", not "false", for that reason.
 """
 
 from __future__ import annotations
@@ -51,7 +56,8 @@ def build():
     by_step = dict(plateau)
     jump1 = max(range(1, len(px)), key=lambda i: py[i] - py[i - 1])
     ax.annotate(
-        f"false plateau: flat to {px[jump1 - 1] // 1000}k,\nthen +{py[jump1] - py[jump1 - 1]:.2f} dB",
+        f"apparent plateau: flat to {px[jump1 - 1] // 1000}k,\nthen +{py[jump1] - py[jump1 - 1]:.2f} dB\n"
+        f"(chunk seed 40 — see 0d)",
         xy=(px[jump1], py[jump1]),
         xytext=(px[jump1] + 12000, py[jump1] - 2.05),
         fontsize=8,
@@ -153,7 +159,7 @@ def build():
     if cands:
         i = cands[-1]
         stats.append(
-            f"- Second false plateau: steps {px[i - 2]:,}–{px[i]:,} all moved <0.05 dB per 8k "
+            f"- Second apparent plateau: steps {px[i - 2]:,}–{px[i]:,} all moved <0.05 dB per 8k "
             f"({py[i - 2]:.4f} → {py[i]:.4f}), then +{py[i + 1] - py[i]:.3f} dB at {px[i + 1]:,}."
         )
     stats.append(

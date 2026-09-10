@@ -222,6 +222,16 @@ any of these costs real time or a real bug, so they live here rather than only i
   three calibration arms are permanently one point each for exactly this reason. If a run's shape
   might matter later, either raise `checkpoint_keep_recent` or score inline per chunk the way the
   plateau and warm-start launchers do. Disk is the trade: each checkpoint is ~4.4GB.
+- **The per-chunk seed is an identity for a slice of data, and the slices are very uneven.** A
+  chunk resolves `run.seed = 28 + step/8000`, and mira's loader reseeds per process start, so that
+  seed selects the whole 8,000-step stream the chunk trains on. Measured across all four runs
+  (`postprocessing/plot_seed_effects.py`, figure `seed_effects.png`): seed 40's chunk is the single
+  best in every run that met it (+1.308 dB in the plateau run, +0.795 control), seed 50's is the
+  best of every chunk from seed 45 on, and seeds 36-39 and 47-49 are the worst in every run — at
+  step numbers 100,000+ apart. **Both "false plateaus" in the baseline run were these slices, not
+  the optimiser.** Consequences: an elbow judged on trailing readings is confounded by which seeds
+  those readings landed on (compare like seeds, or average over a run of them), and this unevenness
+  is the reason pairing works at all — it lands on both arms and cancels.
 - **Calling a plateau/elbow needs several trailing readings, not one flat stretch.** This project
   has hit real false plateaus more than once — a multi-hour flat stretch followed by a further jump
   of over 1 dB. Stopping on the first flat reading has already cost real signal here. The usable

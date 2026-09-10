@@ -111,7 +111,7 @@ In the metric the page is actually about, that band is 4.762 dB short of where t
 - Cosine anneal 1e-4 → 1e-6 over 32,000 further steps: 24.7466 → **24.8850** dB, a gain of **+0.1384** dB.
 - Largest single jump: **+1.308 dB** at step 96,000 (from 21.7307 to 23.0390).
   - The 6 readings immediately before it (48,000–88,000) averaged **+0.116** dB per 8k and never exceeded **+0.157**.
-- Second false plateau: steps 152,000–168,000 all moved <0.05 dB per 8k (24.1005 → 24.1359), then +0.178 dB at 176,000.
+- Second apparent plateau: steps 152,000–168,000 all moved <0.05 dB per 8k (24.1005 → 24.1359), then +0.178 dB at 176,000.
 - Final 3 readings before the elbow: 256k 24.6892, 264k 24.7362, 272k 24.7466 — the flatness the elbow was called on.
 
 | step | PSNR (dB) | Δ per 8k | phase |
@@ -154,6 +154,60 @@ In the metric the page is actually about, that band is 4.762 dB short of where t
 | 288000 | 24.7863 | +0.015 | cosine anneal |
 | 296000 | 24.8304 | +0.044 | cosine anneal |
 | 304000 | 24.8850 | +0.055 | cosine anneal |
+
+
+---
+
+<!-- from plot_seed_effects.py -->
+
+### Per-chunk seed effects
+
+PSNR gained during the chunk trained with each seed. A chunk's seed picks its entire 8,000-step stream, so the same seed is the same slice of data in every run using this schedule — and the runs met these seeds at different step numbers.
+
+| chunk seed | plateau baseline | control | learn7 | learned_mix |
+|---|---|---|---|---|
+| 28 | +0.098 | — | — | — |
+| 29 | — | -0.333 | -0.257 | -0.211 |
+| 30 | — | -0.340 | -0.250 | -0.072 |
+| 31 | — | +0.753 | +0.680 | +0.760 |
+| 32 | — | +0.128 | +0.181 | +0.454 |
+| 33 | — | +0.005 | +0.037 | +0.339 |
+| 34 | — | +0.009 | +0.040 | +0.304 |
+| 35 | — | +0.002 | +0.024 | +0.211 |
+| 36 | +0.157 | -0.080 | -0.079 | +0.066 |  ←  read as a false plateau
+| 37 | +0.092 | -0.177 | -0.189 | -0.086 |  ←  read as a false plateau
+| 38 | +0.114 | -0.302 | -0.279 | -0.137 |  ←  read as a false plateau
+| 39 | +0.098 | -0.396 | — | -0.109 |  ←  read as a false plateau
+| 40 | +1.308 | +0.795 | — | +0.638 |  ←  the jump that ended it
+| 41 | +0.451 | +0.131 | — | +0.227 |
+| 42 | +0.172 | +0.045 | — | +0.123 |
+| 43 | +0.141 | +0.048 | — | +0.123 |
+| 44 | +0.094 | +0.019 | — | +0.058 |
+| 45 | +0.099 | +0.035 | — | +0.073 |
+| 46 | +0.084 | +0.030 | — | +0.072 |
+| 47 | +0.019 | -0.024 | — | +0.006 |  ←  read as a false plateau
+| 48 | +0.024 | -0.006 | — | +0.049 |  ←  read as a false plateau
+| 49 | +0.011 | -0.016 | — | +0.043 |  ←  read as a false plateau
+| 50 | +0.178 | +0.113 | — | +0.143 |  ←  the jump that ended it
+| 51 | +0.036 | +0.003 | — | +0.018 |
+| 52 | +0.088 | +0.044 | — | +0.072 |
+| 53 | +0.048 | — | — | — |
+| 54 | +0.021 | — | — | — |
+| 55 | -0.043 | — | — | — |
+| 56 | +0.025 | — | — | — |
+| 57 | +0.042 | — | — | — |
+| 58 | +0.053 | — | — | — |
+| 59 | +0.058 | — | — | — |
+| 60 | +0.047 | — | — | — |
+| 61 | +0.047 | — | — | — |
+| 62 | +0.010 | — | — | — |
+
+- **seed 40**: plateau baseline +1.308, control +0.795, learned_mix +0.638 dB. Rank among that run's chunks: plateau baseline 1/28, control 1/24, learned_mix 2/24.
+- **seed 50**: plateau baseline +0.178, control +0.113, learned_mix +0.143 dB. Rank among that run's chunks: plateau baseline 3/28, control 5/24, learned_mix 8/24; among seeds 45+ only: plateau baseline 1/18, control 1/8, learned_mix 1/8.
+- **seeds 36–39**: plateau baseline +0.092..+0.157, control -0.396..-0.080, learn7 -0.279..-0.079, learned_mix -0.137..+0.066 dB.
+- **seeds 47–49**: plateau baseline +0.011..+0.024, control -0.024..-0.006, learned_mix +0.006..+0.049 dB.
+
+The plateau run spent its first seven chunks (steps 0–56,000) on seed 28, which is the data-repetition bug in `0e` visible in the metadata: the same slice replayed seven times. Fresh per-chunk seeds begin at its step 64,000.
 
 
 ---

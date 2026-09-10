@@ -127,7 +127,7 @@ does. Unpaired comparisons at short run lengths are worthless here. Everything a
 schedule**, so the seed spread cancels instead of being averaged over. That the paired arms later
 traced the *same* dip-and-recovery shape (section 1) is the evidence that the cancellation works.
 
-### 0c. Training the baseline to its elbow — through two false plateaus
+### 0c. Training the baseline to its elbow
 
 ![Baseline plateau search, elbow and anneal](figures/baseline_elbow.png)
 
@@ -142,11 +142,51 @@ what makes "flat" falsifiable rather than a judgement call.
 **Twice this run looked converged and was not.** The six readings from 48k to 88k averaged
 **+0.116 dB** per 8k and never exceeded +0.157 — then it jumped **+1.31 dB** in a single 8k window
 at 96,000. Later, steps 152k–168k each moved under 0.05 dB, three consecutive readings any
-reasonable eye would call a plateau, and then it gained **+0.18 dB** at 176,000. Stopping at either point would have locked in a baseline over a
-dB short, and every experiment since would have been measured against it.
+reasonable eye would call a plateau, and then it gained **+0.18 dB** at 176,000. Stopping at either
+point would have locked in a baseline over a dB short, and every experiment since would have been
+measured against it.
 
-Hence the rule this project now follows: an elbow needs *several* trailing readings, and the
-increment panel is the thing to read, not the curve.
+Both of those turned out to have a cause, which is the next section.
+
+### 0d. Neither "false plateau" was a plateau — both were the data schedule
+
+![Per-chunk seed effects across all four runs](figures/seed_effects.png)
+
+Training runs in hourly chunks of 8,000 steps, and each chunk resolves its own seed as
+`28 + step/8000`. mira's train loader reseeds on every process start and is not checkpointed, so a
+chunk's seed selects the entire 8,000-step stream that chunk trains on. **The seed is an identity
+for a slice of data**, and the same seed means the same slice in every run on this schedule.
+
+That makes the two flat stretches testable, because the plateau run and the warm-start arms met the
+same seeds at different step numbers and at very different maturity. If a stretch belongs to
+training dynamics it tracks the step; if it belongs to the data it tracks the seed. It tracks the
+seed:
+
+| chunk seed | plateau run | control | what 0c called it |
+|---|---|---|---|
+| 36–39 | +0.157 … +0.092 | −0.080 … −0.396 | first "false plateau" |
+| **40** | **+1.308** | **+0.795** | the jump that ended it |
+| 47–49 | +0.019 … +0.011 | −0.024 … −0.016 | second "false plateau" |
+| **50** | **+0.178** | **+0.113** | the jump that ended it |
+
+Seed 40's slice is the single best chunk of both runs. Seed 50's is the best chunk from seed 45
+onward in **all three** runs that reached it (1/18, 1/8 and 1/8). Seeds 36–39 and 47–49 are the
+worst in both — and the plateau run met them 100,000+ steps away from where the control did. Full
+table in [`stats.md`](stats.md).
+
+So the caution in 0c stands but its explanation was wrong: those were not the optimiser stalling
+and breaking free, they were four poor data slices followed by a good one, twice. Two consequences:
+
+- **An elbow judged on trailing readings is confounded by which seeds those readings landed on.**
+  Comparing like seeds, or averaging over a run of them, is the sound version.
+- **It is also why pairing works.** Since the slices are this uneven, an unpaired comparison
+  measures the seeds as much as the intervention. The arms share the schedule exactly, so the
+  unevenness lands on both and cancels — visible above as control and `learn7` lying on top of each
+  other chunk for chunk.
+
+One stretch is *not* evidence about data: the warm-start arms' first three chunks (seeds 29–31)
+fall and rebound because a warm start resets the optimiser and raises the LR. The plateau run never
+used those seeds, so there is no cross-run check, and the figure marks them separately.
 
 **Why the anneal is a separate phase, and which number to compare against.** The +0.138 dB the
 anneal buys is a property of the *low learning rate*, not of a better region of parameter space. A
@@ -154,7 +194,7 @@ warm start resets the optimiser and raises the LR again, handing that gain strai
 constant-LR warm-started arm is read against the **24.747 plateau**, never the annealed 24.885 —
 which is why both lines appear on every trajectory figure below.
 
-### 0d. Supporting work with no figure
+### 0e. Supporting work with no figure
 
 Recorded here for completeness because the results lean on it, but it produced fixes rather than
 plottable data. Full detail in [`../CHANGELOG.md`](../CHANGELOG.md) and
@@ -194,9 +234,10 @@ arm-to-arm gap is the number this design supports.
 
 Two things visible in the figure that are easy to miss in a table:
 
-- **Both arms dip through 72k–96k and recover at 104k.** That shape belongs to the shared seed
-  schedule, not to the intervention. It is why the control had to be run to full length: before it
-  was, the variant's jump at 104k looked like it might be the idea.
+- **Both arms dip through 72k–96k and recover at 104k.** Those are chunk seeds 36–39 and 40, and
+  section 0d shows the same seeds doing the same thing in the plateau run at a different point in
+  training. The shape is the data schedule, not the intervention. It is why the control had to be
+  run to full length: before it was, the variant's jump at 104k looked like it might be the idea.
 - **The control keeps creeping up.** Constant LR was still buying roughly +0.03 dB per 8k steps out
   at 200k, so the plateau called at step 272,000 was a stopping point, not an asymptote.
 

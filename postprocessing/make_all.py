@@ -27,6 +27,7 @@ sys.path.insert(0, str(HERE))
 FIGURES = [
     ("plot_calibration", "calibration_three_arm"),
     ("plot_baseline_elbow", "baseline_elbow"),
+    ("plot_seed_effects", "seed_effects"),
     ("plot_trajectories", "arm_trajectories"),
     ("plot_decomposition", "gap_decomposition"),
     ("plot_metric_panel", "metric_panel"),
