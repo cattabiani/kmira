@@ -63,7 +63,7 @@ constant.
 per-chunk seed, so a seed identifies a slice of training data — and the slices are far from
 equivalent. Measured over 21 chunks of a paired arm, where a chunk's gain cannot be the
 intervention, the best slice is worth **+0.795 dB** in a single chunk while the worst three cost
-**0.18–0.40 dB**. The ranking is a property of the slice: the same seeds come out best and worst in
+**0.177, 0.302 and 0.396 dB**. The ranking is a property of the slice: the same seeds come out best and worst in
 runs that met them at completely different points in training.
 
 An unpaired comparison at this scale therefore measures the data draw as much as the intervention.
@@ -126,8 +126,10 @@ arms at all.
 
 Those comparisons were paired, so their **directions stand**. Their **magnitudes do not**: the
 baseline they were measured against had, for its first 56,000 steps, trained on roughly half the
-available data because of a data-loader seeding fault, leaving it undertrained by about 1.9 dB at
-that point — details and measurements in
+available data because of a data-loader seeding fault. Measured against the clean baseline at
+matched steps, it was **1.868 dB** behind by the end of that stretch. Coverage is reproducible with
+`codec/scripts/measure_data_coverage.py`, which replays the loader's own shard selection; the
+study's own numbers and reasoning are in
 [`../experiments/2026-09-10-paired-recalibration/NOTES.md`](../experiments/2026-09-10-paired-recalibration/NOTES.md).
 The studies are being redone on the baseline in section 3.
 

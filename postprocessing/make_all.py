@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib
+import itertools
 import json
 import pathlib
 import sys
@@ -88,11 +89,37 @@ def setup_table() -> str:
                 f"weight decay {blob['optim']['weight_decay']:g} |"
             ),
             "",
+            evaluation_row(),
             (
                 "Source: `data/setup.json`, written by `extract_setup_facts.py` from `codec/configs/` and "
-                "the constructed model.\n"
+                "the constructed model; the scoring line is read back off `benchmark.jsonl` itself.\n"
             ),
         ]
+    )
+
+
+def evaluation_row() -> str:
+    """How checkpoints are scored, read off the scored rows rather than off the config.
+
+    The config says what was *requested*; benchmark.jsonl says what was actually used, which is the
+    thing a reader needs and the only version that cannot drift from the numbers beside it.
+    """
+    import lib
+
+    rows = lib.load_rows()
+    frames = sorted({r["n_frames"] for r in rows})
+    seeds = sorted({r["eval_seed"] for r in rows})
+    metrics = [k for k in ("psnr", "ssim", "lpips", "p_dino", "r_fdd") if k in rows[0]]
+    # Validation cadence read off the readings themselves rather than the config, same reasoning.
+    blob = json.loads((HERE / "data" / "run_metadata.json").read_text())["runs"]
+    steps = [r["step"] for r in blob["ablation_baseline"]["readings"]]
+    gaps = sorted({b - a for a, b in itertools.pairwise(steps)})
+    return (
+        f"**Scoring**, as recorded in every row of `benchmark.jsonl`: "
+        f"{'/'.join(f'{f:,}' for f in frames)} held-out frames at a fixed evaluation seed "
+        f"{'/'.join(str(s) for s in seeds)}, reporting {', '.join(metrics)}.\n\n"
+        f"**Validation**, as recorded in the run logs: every {gaps[0]:,} steps on mira's own "
+        f"512-sample split.\n"
     )
 
 
@@ -213,6 +240,48 @@ def protocol_evidence() -> str:
     return "\n".join(lines)
 
 
+def superseded_baseline() -> str:
+    """Why section 5 disclaims the magnitudes of the archived studies, as a measurement.
+
+    The claim is that the retired baseline was undertrained at the point those studies warm-started
+    from. Both arms are in benchmark.jsonl at matched steps, so it is a subtraction rather than a
+    recollection -- which is the whole point: a number quoted in prose about a retired run is
+    exactly the kind that gets carried forward wrongly.
+    """
+    import lib
+
+    rows = lib.load_rows()
+    old = dict(lib.series(rows, "plateau"))
+    new = dict(lib.series(rows, "abl_baseline"))
+    shared = sorted(set(old) & set(new))
+    if not shared:
+        return "### The superseded baseline\n\nNo matched steps scored yet.\n"
+    at = max(s for s in shared if s <= 56_000) if any(s <= 56_000 for s in shared) else shared[0]
+    worst = max(shared, key=lambda s: new[s] - old[s])
+    return "\n".join(
+        [
+            "### The superseded baseline\n",
+            (
+                "Section 5 disclaims the archived studies' magnitudes because the baseline they were "
+                "measured against was undertrained. At matched steps, against the clean baseline:\n"
+            ),
+            "| step | superseded | `baseline_v2` | gap |",
+            "|---|---|---|---|",
+            *(
+                f"| {s:,} | {old[s]:.4f} | {new[s]:.4f} | **{new[s] - old[s]:+.3f}** |"
+                for s in shared
+            ),
+            "",
+            (
+                f"At step {at:,} — the end of the superseded run's fixed-seed stretch — the deficit "
+                f"is **{new[at] - old[at]:+.3f} dB**, peaking at **{new[worst] - old[worst]:+.3f} dB** "
+                f"at {worst:,}. Coverage measured separately with "
+                f"`codec/scripts/measure_data_coverage.py`.\n"
+            ),
+        ]
+    )
+
+
 def main() -> None:
     from lib import save
 
@@ -220,6 +289,7 @@ def main() -> None:
         f"<!-- from make_all.py -->\n\n{setup_table()}",
         f"<!-- from make_all.py -->\n\n{run_metadata_table()}",
         f"<!-- from make_all.py -->\n\n{protocol_evidence()}",
+        f"<!-- from make_all.py -->\n\n{superseded_baseline()}",
     ]
     for module_name, basename in FIGURES:
         module = importlib.import_module(module_name)

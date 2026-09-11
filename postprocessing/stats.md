@@ -27,7 +27,11 @@ file's prose appears here. Sources: `codec/results/benchmark.jsonl` (written by
 | compression | 442,368 → 4,608 values per frame = **96×**, spatial only |
 | optimiser | AdamW lr 0.0001, betas [0.9, 0.95], weight decay 0.1 |
 
-Source: `data/setup.json`, written by `extract_setup_facts.py` from `codec/configs/` and the constructed model.
+**Scoring**, as recorded in every row of `benchmark.jsonl`: 2,048 held-out frames at a fixed evaluation seed 37, reporting psnr, ssim, lpips, p_dino, r_fdd.
+
+**Validation**, as recorded in the run logs: every 1,000 steps on mira's own 512-sample split.
+
+Source: `data/setup.json`, written by `extract_setup_facts.py` from `codec/configs/` and the constructed model; the scoring line is read back off `benchmark.jsonl` itself.
 
 
 ---
@@ -76,6 +80,33 @@ An early three-run study tried to resolve a published ~1.4 dB bottleneck effect 
 - effect / noise = **1.27×**. The launcher's own criterion for calling the setup usable was effect > 3 × noise = 3.4262 dB, which this does not meet: **TOO NOISY** at this run length.
 
 That study is not reported as a result -- one run per arm cannot estimate a spread, and all three stopped undertrained. It is reported here only as the reason the protocol is paired.
+
+
+---
+
+<!-- from make_all.py -->
+
+### The superseded baseline
+
+Section 5 disclaims the archived studies' magnitudes because the baseline they were measured against was undertrained. At matched steps, against the clean baseline:
+
+| step | superseded | `baseline_v2` | gap |
+|---|---|---|---|
+| 8,000 | 19.4139 | 19.4849 | **+0.071** |
+| 16,000 | 20.1229 | 20.2993 | **+0.176** |
+| 24,000 | 20.5342 | 20.7414 | **+0.207** |
+| 32,000 | 20.8290 | 21.9561 | **+1.127** |
+| 40,000 | 21.0350 | 22.5956 | **+1.561** |
+| 48,000 | 21.1719 | 22.9129 | **+1.741** |
+| 56,000 | 21.2702 | 23.1378 | **+1.868** |
+| 64,000 | 21.4268 | 23.3574 | **+1.931** |
+| 72,000 | 21.5189 | 23.5159 | **+1.997** |
+| 80,000 | 21.6331 | 23.6644 | **+2.031** |
+| 88,000 | 21.7307 | 23.7954 | **+2.065** |
+| 96,000 | 23.0390 | 23.8692 | **+0.830** |
+| 104,000 | 23.4904 | 23.8985 | **+0.408** |
+
+At step 56,000 — the end of the superseded run's fixed-seed stretch — the deficit is **+1.868 dB**, peaking at **+2.065 dB** at 88,000. Coverage measured separately with `codec/scripts/measure_data_coverage.py`.
 
 
 ---
