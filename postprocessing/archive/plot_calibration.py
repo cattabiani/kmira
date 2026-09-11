@@ -30,11 +30,17 @@ apart is the finding, and making them one colour is what says so.
 
 from __future__ import annotations
 
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
+
 import json
 
 import matplotlib.pyplot as plt
 from lib import (
     ANNEAL_TAG,
+    ARCHIVE_FIGURES,
     DATA,
     INK,
     INK_SOFT,
@@ -289,4 +295,4 @@ def build():
 
 if __name__ == "__main__":
     fig, stats = build()
-    print(save(fig, "calibration_three_arm"))
+    print(save(fig, "calibration_three_arm", ARCHIVE_FIGURES))

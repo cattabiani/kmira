@@ -10,10 +10,16 @@ raw magnitude here is how "92% on the non-stock blocks" once got written up as "
 
 from __future__ import annotations
 
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
+
 import json
 
 import matplotlib.pyplot as plt
 from lib import (
+    ARCHIVE_FIGURES,
     COLOR,
     DATA,
     INK_MUTED,
@@ -145,4 +151,4 @@ def build():
 
 if __name__ == "__main__":
     fig, stats = build()
-    print(save(fig, "layer_weight_shares"))
+    print(save(fig, "layer_weight_shares", ARCHIVE_FIGURES))

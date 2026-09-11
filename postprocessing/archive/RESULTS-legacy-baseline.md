@@ -33,7 +33,7 @@ checkpoint. That file is the record but it is not readable — this page is the 
 
 **Every figure and every number here is generated, not written.** The figures come from the
 `plot_*.py` scripts beside this file; the numbers are quoted from
-[`stats.md`](../stats.md), which `make_all.py` regenerates from `benchmark.jsonl` and the committed
+[`stats.md`](stats.md), which `make_all.py` regenerates from `benchmark.jsonl` and the committed
 `data/*.json`. If a number here disagrees with `stats.md`, `stats.md` is right. Regenerate with:
 
 ```bash
@@ -43,7 +43,7 @@ pixi run python postprocessing/make_all.py
 **`learn7` was shelved mid-run at 96,000** (its warm-start origin has been retired), so its numbers
 are a snapshot of an unfinished arm. Anything about the frontier of such an arm is stated
 qualitatively here and quantitatively in
-[`stats.md`](../stats.md), whose header carries the date it was generated. Prose that hardcoded "at
+[`stats.md`](stats.md), whose header carries the date it was generated. Prose that hardcoded "at
 64k, freedom is 20%" went stale twice inside a single afternoon; prose that says "freedom has
 stopped growing while reach has not" stays true and points at the table for the number.
 
@@ -83,7 +83,7 @@ Two shorthands for readings rather than runs: **"the plateau"** is the baseline 
 constant-LR reading, **24.747 dB** at step 272,000, and **"the annealed baseline"** is 24.885 at
 304,000. Warm-start arms are read against the former — 0b says why.
 
-Per-run seeds, schedules and reading counts are in [`stats.md`](../stats.md).
+Per-run seeds, schedules and reading counts are in [`stats.md`](stats.md).
 
 ### ⚠ The baseline run has been retired (2026-09-11)
 
@@ -163,7 +163,7 @@ absolute number on this page is comparable with the paper's.
 
 ### 0b. Training the baseline to its elbow
 
-![Baseline plateau search, elbow and anneal](../figures/baseline_elbow.png)
+![Baseline plateau search, elbow and anneal](figures/baseline_elbow.png)
 
 The locked baseline is a constant-LR run taken to the point where it stopped improving, then
 annealed. The top panel is scored PSNR; the bottom panel is the per-reading increment, which is
@@ -190,7 +190,7 @@ Both of those turned out to have a cause, which is the next section.
 
 ### 0c. Neither "false plateau" was a plateau — both were the data schedule
 
-![Per-chunk seed effects across all four runs](../figures/seed_effects.png)
+![Per-chunk seed effects across all four runs](figures/seed_effects.png)
 
 Training runs in hourly chunks of 8,000 steps, and each chunk resolves its own seed as
 `28 + step/8000`. mira's train loader reseeds on every process start and is not checkpointed, so a
@@ -212,7 +212,7 @@ seed:
 Seed 40's slice is the single best chunk of both runs. Seed 50's is the best chunk from seed 45
 onward in **all three** runs that reached it (1/18, 1/8 and 1/8). Seeds 36–39 and 47–49 are the
 worst in both — and the baseline run met them 100,000+ steps away from where `control` did. Full
-table in [`stats.md`](../stats.md).
+table in [`stats.md`](stats.md).
 
 So the caution in 0c stands but its explanation was wrong: those were not the optimiser stalling
 and breaking free, they were four poor data slices followed by a good one, twice. Two consequences:
@@ -234,7 +234,7 @@ used those seeds, so there is no cross-run check, and the figure marks them sepa
 
 ### 1. Learning the DINO layer weights gains +2.914 dB over its paired control
 
-![PSNR trajectories for all three arms](../figures/arm_trajectories.png)
+![PSNR trajectories for all three arms](figures/arm_trajectories.png)
 
 Three arms, all warm-started from the same locked baseline (`checkpoint-304000`), same per-chunk
 seed schedule, same 7-layer consistency loss. They differ only in which DINOv3 blocks the
@@ -257,7 +257,7 @@ Two things visible in the figure that are easy to miss in a table:
 
 ### 2. The gap widens monotonically, and it is mostly *reach* rather than *freedom*
 
-![Total gap and its decomposition](../figures/gap_decomposition.png)
+![Total gap and its decomposition](figures/gap_decomposition.png)
 
 The gap grows from +0.236 dB at 8k to +2.914 dB at 200k, **widening at 23 of 24 step-to-step
 transitions**. The one exception is 96k→104k, where the control climbed out of the shared dip a
@@ -271,12 +271,12 @@ The right panel splits it, which needs all three arms scored at the same step:
 Freedom's **share of the gap falls at every single reading** — it starts as the majority of a very
 small gap and is a minority of a large one by the time `learn7`'s frontier is reached. More
 telling, freedom in absolute dB has now flattened while reach keeps climbing. The current values
-are in [`stats.md`](../stats.md)'s decomposition table; `learn7` is mid-run, so see the provisional
+are in [`stats.md`](stats.md)'s decomposition table; `learn7` is mid-run, so see the provisional
 section below before quoting them.
 
 ### 3. The metrics disagree, and P-DINO does not separate the arms at all
 
-![All five benchmark metrics per arm](../figures/metric_panel.png)
+![All five benchmark metrics per arm](figures/metric_panel.png)
 
 At matched 200k, `learned_mix` over `control`: PSNR **+11.7%**, LPIPS **+22.5%**, SSIM **+5.9%**,
 rFDD **+7.9%** — and P-DINO **−0.8%**, i.e. very slightly *worse*.
@@ -296,7 +296,7 @@ is an absence of gain, not a degradation.
 
 ### 4. Each arm puts its mass on the shallowest block it is allowed to read
 
-![Normalised weight share per DINOv3 block, per arm](../figures/layer_weight_shares.png)
+![Normalised weight share per DINOv3 block, per arm](figures/layer_weight_shares.png)
 
 This is the mechanism, and it is the most legible result here.
 
@@ -320,7 +320,7 @@ scale. The collapse is that symmetry being resolved, not a signal.
 
 ### 5. The gain is concentrated in the metric least sensitive to layer choice
 
-![Metric signature: ours beside mira's own layer ablation](../figures/metric_signature.png)
+![Metric signature: ours beside mira's own layer ablation](figures/metric_signature.png)
 
 mira's own layer ablation (published, transcribed with provenance in
 [`data/mira_layer_ablation.json`](../data/mira_layer_ablation.json)) moves in the opposite shape.

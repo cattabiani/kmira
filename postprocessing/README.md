@@ -19,7 +19,7 @@ generated from the record, regenerable in one command.
 | file | what it is |
 |---|---|
 | `RESULTS.md` | the write-up — **WIP**, rebuilding on `baseline_v2` |
-| `archive/RESULTS-legacy-baseline.md` | the previous write-up, retired with its baseline |
+| `archive/` | the retired baseline's studies: page, figures, scripts and stats together |
 | `stats.md` | **generated** — every number the write-up quotes. The numeric source of truth |
 | `make_all.py` | regenerates all figures and `stats.md` |
 | `lib.py` | data loading, the validated palette, matplotlib style |
@@ -34,6 +34,7 @@ generated from the record, regenerable in one command.
 
 ```bash
 pixi run python postprocessing/make_all.py            # all figures + stats.md
+pixi run python postprocessing/make_all.py --archive  # also rebuilds archive/
 pixi run python postprocessing/plot_trajectories.py   # or one at a time
 ```
 

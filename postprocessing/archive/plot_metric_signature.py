@@ -13,10 +13,16 @@ better latent looks like. That is the whole reason this figure exists.
 
 from __future__ import annotations
 
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
+
 import json
 
 import matplotlib.pyplot as plt
 from lib import (
+    ARCHIVE_FIGURES,
     DATA,
     INK_MUTED,
     INK_SOFT,
@@ -155,5 +161,5 @@ def build():
 
 if __name__ == "__main__":
     fig, stats = build()
-    print(save(fig, "metric_signature"))
+    print(save(fig, "metric_signature", ARCHIVE_FIGURES))
     print(stats)

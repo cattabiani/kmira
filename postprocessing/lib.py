@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 REPO = pathlib.Path(__file__).resolve().parent.parent
 BENCHMARK = REPO / "codec" / "results" / "benchmark.jsonl"
 FIGURES = REPO / "postprocessing" / "figures"
+ARCHIVE_FIGURES = REPO / "postprocessing" / "archive" / "figures"
 DATA = REPO / "postprocessing" / "data"
 
 # The three Experiment 1/2 arms, in the order they nest: control can do neither, learn7 can move
@@ -155,9 +156,12 @@ def thousands(ax) -> None:
     ax.xaxis.set_major_formatter(lambda v, _: f"{v / 1000:.0f}k")
 
 
-def save(fig, name: str) -> pathlib.Path:
-    FIGURES.mkdir(parents=True, exist_ok=True)
-    path = FIGURES / f"{name}.png"
+def save(fig, name: str, out_dir: pathlib.Path | None = None) -> pathlib.Path:
+    """Write a figure. ``out_dir`` defaults to the live ``figures/``; the archived studies pass
+    ``archive/figures`` so a retired figure can never be regenerated into the live page."""
+    out_dir = out_dir or FIGURES
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{name}.png"
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
     return path

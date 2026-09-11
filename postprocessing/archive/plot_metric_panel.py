@@ -7,8 +7,14 @@ multiples are for, and the reason this is five panels rather than one chart with
 
 from __future__ import annotations
 
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
+
 import matplotlib.pyplot as plt
 from lib import (
+    ARCHIVE_FIGURES,
     ARM_LABEL,
     ARMS,
     COLOR,
@@ -108,5 +114,5 @@ def build():
 
 if __name__ == "__main__":
     fig, stats = build()
-    print(save(fig, "metric_panel"))
+    print(save(fig, "metric_panel", ARCHIVE_FIGURES))
     print(stats)

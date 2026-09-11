@@ -16,8 +16,14 @@ optimiser. The annotations say "apparent", not "false", for that reason.
 
 from __future__ import annotations
 
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
+
 import matplotlib.pyplot as plt
 from lib import (
+    ARCHIVE_FIGURES,
     GRID,
     INK,
     INK_MUTED,
@@ -181,4 +187,4 @@ def build():
 
 if __name__ == "__main__":
     fig, stats = build()
-    print(save(fig, "baseline_elbow"))
+    print(save(fig, "baseline_elbow", ARCHIVE_FIGURES))
