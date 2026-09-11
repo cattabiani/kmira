@@ -25,10 +25,14 @@ sys.path.insert(0, str(HERE))
 # (module, figure basename) in the order they appear in RESULTS.md: the foundation the benchmark
 # rests on first, then the experiments built on top of it.
 FIGURES = [
-    # plot_calibration is deliberately NOT here. Its three-run study cannot support the claim it
-    # was meant to support (see RESULTS.md "Not on this page yet"), so the figure is not published
-    # while the page has no calibration section. The script stays, ready for the paired
-    # recalibration runs -- deleting it would throw away working code for a study that is queued.
+    ("plot_baseline_v2", "baseline_v2_progress"),
+]
+
+# Figures of the RETIRED baseline's studies. Their scripts still run and their findings survive
+# qualitatively, but every absolute number in them rests on a run that saw 53.4% of the training
+# data, so they are not regenerated into the live page -- they belong to
+# archive/RESULTS-legacy-baseline.md. Pass --archive to rebuild them.
+ARCHIVED_FIGURES = [
     ("plot_baseline_elbow", "baseline_elbow"),
     ("plot_seed_effects", "seed_effects"),
     ("plot_trajectories", "arm_trajectories"),
@@ -152,7 +156,8 @@ def main() -> None:
         f"<!-- from make_all.py -->\n\n{setup_table()}",
         f"<!-- from make_all.py -->\n\n{run_metadata_table()}",
     ]
-    for module_name, basename in FIGURES:
+    figures = FIGURES + (ARCHIVED_FIGURES if "--archive" in sys.argv else [])
+    for module_name, basename in figures:
         module = importlib.import_module(module_name)
         fig, stats = module.build()
         path = save(fig, basename)

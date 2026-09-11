@@ -43,6 +43,7 @@ Captured by `extract_run_metadata.py`. `benchmark.jsonl` holds the scored PSNR r
 | `A_baseline` | 20 | 1 | 1 | 28–28 (1) | cosine |
 | `B_frozen_bneck` | 20 | 1 | 1 | 28–28 (1) | cosine |
 | `C_baseline_seed2` | 20 | 1 | 1 | 1234–1234 (1) | cosine |
+| `ablation_baseline` | 106 | 13 | 18 | 1029–1042 (14) | constant |
 | `plateau_baseline` | 305 | 34 | 44 | 28–66 (32) | mixed (40 constant, 4 cosine) |
 | `warmstart_control` | 201 | 25 | 29 | 28–52 (25) | constant |
 | `warmstart_learn7` | 97 | 12 | 12 | 28–39 (12) | constant |
@@ -54,6 +55,42 @@ Captured by `extract_run_metadata.py`. `benchmark.jsonl` holds the scored PSNR r
 - `warmstart_control vs warmstart_learn7`: 12 shared seeds, identical over the shared range: **True**
 
 Note `plateau_baseline` (RESULTS.md calls it *the baseline run*) reads as mixed because `run_anneal.sh` continues into that run's own output directory, so the log holds both its constant-LR chunks and the cosine ones.
+
+
+---
+
+<!-- from plot_baseline_v2.py -->
+
+### baseline_v2 — WIP readout at step 105,000
+
+The clean baseline: per-chunk seeds from step 0, 100% training-data coverage, constant LR 1e-4, no anneal yet. Still training, so every number here moves.
+
+| step | PSNR (dB) | Δ per 8k |
+|---|---|---|
+| 8,000 | 19.4849 |  |
+| 16,000 | 20.2993 | +0.814 |
+| 24,000 | 20.7414 | +0.442 |
+| 32,000 | 21.9561 | +1.215 |
+| 40,000 | 22.5956 | +0.640 |
+| 48,000 | 22.9129 | +0.317 |
+| 56,000 | 23.1378 | +0.225 |
+| 64,000 | 23.3574 | +0.220 |
+| 72,000 | 23.5159 | +0.159 |
+| 80,000 | 23.6644 | +0.149 |
+| 88,000 | 23.7954 | +0.131 |
+| 96,000 | 23.8692 | +0.074 |
+| 104,000 | 23.8985 | +0.029 |
+
+Validation loss terms, trailing slope over the last 8 readings:
+
+| term | latest | trailing slope per 10k steps |
+|---|---|---|
+| `loss_total` | 0.2398 | -0.0188 |
+| `loss_mae` | 0.0606 | -0.00379 |
+| `loss_lpips_perceptual` | 0.1791 | -0.0151 |
+| `loss_dino_latent_consistency` | 0.0001 | — at the log's 4-dp floor |
+
+A term whose trailing slope is small relative to its own value has stopped moving; read each separately, because `loss_total` is dominated by `loss_lpips_perceptual` and hides the other two.
 
 
 ---

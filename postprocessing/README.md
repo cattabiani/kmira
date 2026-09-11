@@ -18,7 +18,8 @@ generated from the record, regenerable in one command.
 
 | file | what it is |
 |---|---|
-| `RESULTS.md` | the write-up, split into **established** and **provisional** |
+| `RESULTS.md` | the write-up — **WIP**, rebuilding on `baseline_v2` |
+| `archive/RESULTS-legacy-baseline.md` | the previous write-up, retired with its baseline |
 | `stats.md` | **generated** — every number the write-up quotes. The numeric source of truth |
 | `make_all.py` | regenerates all figures and `stats.md` |
 | `lib.py` | data loading, the validated palette, matplotlib style |
@@ -76,9 +77,12 @@ Worth stating, because the point of the folder is that its numbers can be truste
   `data/mira_bottleneck_ablation.json`. Each records the source file, the table label, that it was
   transcribed by hand, and why absolute values are not comparable — only gaps between two of
   mira's own rows are ever used.
-- **Claims with no data say so.** `RESULTS.md` section 0d collects the supporting work that
-  produced fixes rather than plottable numbers, explicitly labelled as having no figure, so the
-  boundary between "measured here" and "recorded in the history" is visible.
+- **Claims with no data say so.** `RESULTS.md` carries a "Not here yet" table naming each queued
+  run and what it would give, so the boundary between measured and pending is visible rather than
+  implied by absence.
+- **A retired foundation retires its page.** When the baseline was found to have trained on 53.4%
+  of the data, the results page was archived whole rather than patched number by number — a page
+  whose every absolute value is wrong is not fixable by editing the wrong ones.
 - **Established and provisional stay separate.** An arm that is still running, or an interpretation
   that hasn't been measured, goes in the provisional section and says why.
 - **Arm-to-arm numbers only at matched steps.** All three arms were still improving when last

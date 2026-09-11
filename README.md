@@ -42,7 +42,11 @@ MIRA.
 
 ## Where to look
 
-- **[postprocessing/RESULTS.md](postprocessing/RESULTS.md): the results, in figures.** Start here
+- **[postprocessing/RESULTS.md](postprocessing/RESULTS.md): the results, in figures.** Currently
+  **WIP** — the previous baseline was retired on 2026-09-11 (it trained on 53.4% of the data) and
+  the studies are being rebuilt on a clean one; the old page is at
+  [postprocessing/archive/RESULTS-legacy-baseline.md](postprocessing/archive/RESULTS-legacy-baseline.md).
+  Start here
   if you want to know what came out rather than how to run it. Split into established and
   provisional, with every number generated from `codec/results/benchmark.jsonl` rather than
   written by hand — see [postprocessing/](postprocessing/) for how that is kept honest.
