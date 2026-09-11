@@ -59,6 +59,27 @@ Note `plateau_baseline` (RESULTS.md calls it *the baseline run*) reads as mixed 
 
 ---
 
+<!-- from make_all.py -->
+
+### Why comparisons here are paired
+
+Each 8,000-step chunk draws its stream from a per-chunk seed, so a seed identifies a slice of training data. The slices are not equivalent.
+
+Measured on `warmstart_control`, a paired arm over 21 chunks, so a chunk's gain or loss cannot be the intervention:
+
+- best slice: **+0.795 dB** in one chunk (seed 40)
+- worst slices: **-0.177 dB** (seed 37), **-0.302 dB** (seed 38), **-0.396 dB** (seed 39)
+- and the ranking is a property of the slice, not of the run: the same seeds are best and worst in runs that met them at completely different steps.
+
+An early three-run study tried to resolve a published ~1.4 dB bottleneck effect with one run per arm, and could not:
+
+- effect / noise = **1.27×**. The launcher's own criterion for calling the setup usable was effect > 3 × noise = 3.4262 dB, which this does not meet: **TOO NOISY** at this run length.
+
+That study is not reported as a result -- one run per arm cannot estimate a spread, and all three stopped undertrained. It is reported here only as the reason the protocol is paired.
+
+
+---
+
 <!-- from plot_baseline_v2.py -->
 
 ### baseline_v2 — WIP readout at step 105,000
@@ -91,274 +112,3 @@ Validation loss terms, trailing slope over the last 8 readings:
 | `loss_dino_latent_consistency` | 0.0001 | — at the log's 4-dp floor |
 
 A term whose trailing slope is small relative to its own value has stopped moving; read each separately, because `loss_total` is dominated by `loss_lpips_perceptual` and hides the other two.
-
-
----
-
-<!-- from plot_baseline_elbow.py -->
-
-### Baseline plateau search and anneal
-
-- Constant LR 1e-4 from step 8,000 to the elbow at **272,000** steps, PSNR 19.4139 → **24.7466** dB.
-- Cosine anneal 1e-4 → 1e-6 over 32,000 further steps: 24.7466 → **24.8850** dB, a gain of **+0.1384** dB.
-- Largest single jump: **+1.308 dB** at step 96,000 (from 21.7307 to 23.0390).
-  - The 6 readings immediately before it (48,000–88,000) averaged **+0.116** dB per 8k and never exceeded **+0.157**.
-- Second apparent plateau: steps 152,000–168,000 all moved <0.05 dB per 8k (24.1005 → 24.1359), then +0.178 dB at 176,000.
-- Final 3 readings before the elbow: 256k 24.6892, 264k 24.7362, 272k 24.7466 — the flatness the elbow was called on.
-
-| step | PSNR (dB) | Δ per 8k | phase |
-|---|---|---|---|
-| 8000 | 19.4139 |  | constant LR |
-| 16000 | 20.1229 | +0.709 | constant LR |
-| 24000 | 20.5342 | +0.411 | constant LR |
-| 32000 | 20.8290 | +0.295 | constant LR |
-| 40000 | 21.0350 | +0.206 | constant LR |
-| 48000 | 21.1719 | +0.137 | constant LR |
-| 56000 | 21.2702 | +0.098 | constant LR |
-| 64000 | 21.4268 | +0.157 | constant LR |
-| 72000 | 21.5189 | +0.092 | constant LR |
-| 80000 | 21.6331 | +0.114 | constant LR |
-| 88000 | 21.7307 | +0.098 | constant LR |
-| 96000 | 23.0390 | +1.308 | constant LR |
-| 104000 | 23.4904 | +0.451 | constant LR |
-| 112000 | 23.6627 | +0.172 | constant LR |
-| 120000 | 23.8034 | +0.141 | constant LR |
-| 128000 | 23.8979 | +0.094 | constant LR |
-| 136000 | 23.9967 | +0.099 | constant LR |
-| 144000 | 24.0811 | +0.084 | constant LR |
-| 152000 | 24.1005 | +0.019 | constant LR |
-| 160000 | 24.1246 | +0.024 | constant LR |
-| 168000 | 24.1359 | +0.011 | constant LR |
-| 176000 | 24.3139 | +0.178 | constant LR |
-| 184000 | 24.3497 | +0.036 | constant LR |
-| 192000 | 24.4378 | +0.088 | constant LR |
-| 200000 | 24.4857 | +0.048 | constant LR |
-| 208000 | 24.5070 | +0.021 | constant LR |
-| 216000 | 24.4644 | -0.043 | constant LR |
-| 224000 | 24.4890 | +0.025 | constant LR |
-| 232000 | 24.5310 | +0.042 | constant LR |
-| 240000 | 24.5845 | +0.053 | constant LR |
-| 248000 | 24.6423 | +0.058 | constant LR |
-| 256000 | 24.6892 | +0.047 | constant LR |
-| 264000 | 24.7362 | +0.047 | constant LR |
-| 272000 | 24.7466 | +0.010 | constant LR |
-| 280000 | 24.7712 | +0.025 | cosine anneal |
-| 288000 | 24.7863 | +0.015 | cosine anneal |
-| 296000 | 24.8304 | +0.044 | cosine anneal |
-| 304000 | 24.8850 | +0.055 | cosine anneal |
-
-
----
-
-<!-- from plot_seed_effects.py -->
-
-### Per-chunk seed effects
-
-PSNR gained during the chunk trained with each seed. A chunk's seed picks its entire 8,000-step stream, so the same seed is the same slice of data in every run using this schedule — and the runs met these seeds at different step numbers.
-
-| chunk seed | the baseline run | control | learn7 | learned_mix |
-|---|---|---|---|---|
-| 28 | +0.098 | — | — | — |
-| 29 | — | -0.333 | -0.257 | -0.211 |
-| 30 | — | -0.340 | -0.250 | -0.072 |
-| 31 | — | +0.753 | +0.680 | +0.760 |
-| 32 | — | +0.128 | +0.181 | +0.454 |
-| 33 | — | +0.005 | +0.037 | +0.339 |
-| 34 | — | +0.009 | +0.040 | +0.304 |
-| 35 | — | +0.002 | +0.024 | +0.211 |
-| 36 | +0.157 | -0.080 | -0.079 | +0.066 |  ←  read as a false plateau
-| 37 | +0.092 | -0.177 | -0.189 | -0.086 |  ←  read as a false plateau
-| 38 | +0.114 | -0.302 | -0.279 | -0.137 |  ←  read as a false plateau
-| 39 | +0.098 | -0.396 | -0.336 | -0.109 |  ←  read as a false plateau
-| 40 | +1.308 | +0.795 | — | +0.638 |  ←  the jump that ended it
-| 41 | +0.451 | +0.131 | — | +0.227 |
-| 42 | +0.172 | +0.045 | — | +0.123 |
-| 43 | +0.141 | +0.048 | — | +0.123 |
-| 44 | +0.094 | +0.019 | — | +0.058 |
-| 45 | +0.099 | +0.035 | — | +0.073 |
-| 46 | +0.084 | +0.030 | — | +0.072 |
-| 47 | +0.019 | -0.024 | — | +0.006 |  ←  read as a false plateau
-| 48 | +0.024 | -0.006 | — | +0.049 |  ←  read as a false plateau
-| 49 | +0.011 | -0.016 | — | +0.043 |  ←  read as a false plateau
-| 50 | +0.178 | +0.113 | — | +0.143 |  ←  the jump that ended it
-| 51 | +0.036 | +0.003 | — | +0.018 |
-| 52 | +0.088 | +0.044 | — | +0.072 |
-| 53 | +0.048 | — | — | — |
-| 54 | +0.021 | — | — | — |
-| 55 | -0.043 | — | — | — |
-| 56 | +0.025 | — | — | — |
-| 57 | +0.042 | — | — | — |
-| 58 | +0.053 | — | — | — |
-| 59 | +0.058 | — | — | — |
-| 60 | +0.047 | — | — | — |
-| 61 | +0.047 | — | — | — |
-| 62 | +0.010 | — | — | — |
-
-- **seed 40**: the baseline run +1.308, control +0.795, learned_mix +0.638 dB. Rank among that run's chunks: the baseline run 1/28, control 1/24, learned_mix 2/24.
-- **seed 50**: the baseline run +0.178, control +0.113, learned_mix +0.143 dB. Rank among that run's chunks: the baseline run 3/28, control 5/24, learned_mix 8/24; among seeds 45+ only: the baseline run 1/18, control 1/8, learned_mix 1/8.
-- **seeds 36–39**: the baseline run +0.092..+0.157, control -0.396..-0.080, learn7 -0.336..-0.079, learned_mix -0.137..+0.066 dB.
-- **seeds 47–49**: the baseline run +0.011..+0.024, control -0.024..-0.006, learned_mix +0.006..+0.049 dB.
-
-The baseline run spent its first seven chunks (steps 0–56,000) on seed 28 — the same slice replayed seven times, before the per-chunk seed schedule existed. Fresh seeds begin at its step 64,000, which is why it has no reading for seeds 29–35.
-
-
----
-
-<!-- from plot_trajectories.py -->
-
-### PSNR by arm and step
-
-| step | control | learn7 | learned_mix |
-|---|---|---|---|
-| 8000 | 24.506 | 24.640 | 24.742 |
-| 16000 | 24.173 | 24.384 | 24.532 |
-| 24000 | 23.833 | 24.134 | 24.459 |
-| 32000 | 24.586 | 24.814 | 25.219 |
-| 40000 | 24.713 | 24.995 | 25.673 |
-| 48000 | 24.718 | 25.033 | 26.011 |
-| 56000 | 24.727 | 25.073 | 26.316 |
-| 64000 | 24.729 | 25.097 | 26.526 |
-| 72000 | 24.649 | 25.018 | 26.592 |
-| 80000 | 24.472 | 24.828 | 26.506 |
-| 88000 | 24.170 | 24.549 | 26.369 |
-| 96000 | 23.774 | 24.213 | 26.260 |
-| 104000 | 24.570 | — | 26.898 |
-| 112000 | 24.701 | — | 27.125 |
-| 120000 | 24.746 | — | 27.248 |
-| 128000 | 24.794 | — | 27.371 |
-| 136000 | 24.814 | — | 27.429 |
-| 144000 | 24.849 | — | 27.502 |
-| 152000 | 24.878 | — | 27.574 |
-| 160000 | 24.854 | — | 27.580 |
-| 168000 | 24.848 | — | 27.629 |
-| 176000 | 24.832 | — | 27.672 |
-| 184000 | 24.945 | — | 27.815 |
-| 192000 | 24.948 | — | 27.834 |
-| 200000 | 24.992 | — | 27.905 |
-
-Baselines: constant-LR plateau 24.747 dB (`plateau-272000`), annealed 24.885 dB (`anneal-304000`).
-
-
----
-
-<!-- from plot_decomposition.py -->
-
-### Freedom / reach decomposition (steps where all three arms are scored)
-
-| step | freedom (dB) | reach (dB) | total (dB) | freedom share |
-|---|---|---|---|---|
-| 8000 | +0.134 | +0.102 | +0.236 | 57% |
-| 16000 | +0.210 | +0.148 | +0.358 | 59% |
-| 24000 | +0.301 | +0.325 | +0.626 | 48% |
-| 32000 | +0.229 | +0.405 | +0.634 | 36% |
-| 40000 | +0.282 | +0.678 | +0.959 | 29% |
-| 48000 | +0.314 | +0.979 | +1.293 | 24% |
-| 56000 | +0.345 | +1.243 | +1.588 | 22% |
-| 64000 | +0.367 | +1.430 | +1.797 | 20% |
-| 72000 | +0.369 | +1.575 | +1.943 | 19% |
-| 80000 | +0.356 | +1.678 | +2.034 | 17% |
-| 88000 | +0.379 | +1.820 | +2.199 | 17% |
-| 96000 | +0.439 | +2.047 | +2.486 | 18% |
-
-### Total gap, learned_mix − control, at every matched step
-
-| step | gap (dB) |
-|---|---|
-| 8000 | +0.236 |
-| 16000 | +0.358 |
-| 24000 | +0.626 |
-| 32000 | +0.634 |
-| 40000 | +0.959 |
-| 48000 | +1.293 |
-| 56000 | +1.588 |
-| 64000 | +1.797 |
-| 72000 | +1.943 |
-| 80000 | +2.034 |
-| 88000 | +2.199 |
-| 96000 | +2.486 |
-| 104000 | +2.329 |
-| 112000 | +2.424 |
-| 120000 | +2.502 |
-| 128000 | +2.577 |
-| 136000 | +2.615 |
-| 144000 | +2.653 |
-| 152000 | +2.695 |
-| 160000 | +2.726 |
-| 168000 | +2.782 |
-| 176000 | +2.841 |
-| 184000 | +2.871 |
-| 192000 | +2.886 |
-| 200000 | +2.914 |
-
-Gap widens at 23 of 24 step-to-step transitions.
-
-
----
-
-<!-- from plot_metric_panel.py -->
-
-### All benchmark metrics, control vs learned_mix at matched steps
-
-- **PSNR (dB)** @ 200000: control 24.9917, learned_mix 27.9053 → +11.7% in the better direction
-- **SSIM** @ 200000: control 0.810534, learned_mix 0.858679 → +5.9% in the better direction
-- **LPIPS** @ 200000: control 0.105866, learned_mix 0.0820097 → +22.5% in the better direction
-- **P-DINO** @ 200000: control 9.68847e-05, learned_mix 9.76208e-05 → -0.8% in the better direction
-- **rFDD** @ 200000: control 0.673951, learned_mix 0.620949 → +7.9% in the better direction
-
-Baseline reference values, for the same metrics:
-
-| metric | plateau-272000 | anneal-304000 |
-|---|---|---|
-| PSNR (dB) | 24.7466 | 24.885 |
-| SSIM | 0.799705 | 0.805453 |
-| LPIPS | 0.111439 | 0.110182 |
-| P-DINO | 0.000100595 | 0.000100551 |
-| rFDD | 0.686855 | 0.720483 |
-
-
----
-
-<!-- from plot_metric_signature.py -->
-
-### Metric signature: relative improvement in each metric's better direction
-
-| metric | mira: 7 blocks vs deepest only | kmira: learned_mix vs control |
-|---|---|---|
-| PSNR | +1.0% | +11.7% |
-| SSIM | +0.5% | +5.9% |
-| LPIPS | +17.7% | +22.5% |
-| P-DINO | +12.5% | -0.8% |
-| rFID | +30.8% | not measured here |
-| rFVD | +29.8% | not measured here |
-| rFDD | +32.0% | +7.9% |
-| gFID | +12.3% | not measured here |
-| gFVD | +5.4% | not measured here |
-| gFDD | +11.3% | not measured here |
-
-mira's numbers are transcribed from `sections/appendix.tex`, table `tab:exp-enc-layers`; see `data/mira_layer_ablation.json` for provenance and the comparability warning.
-
-
----
-
-<!-- from plot_layer_weights.py -->
-
-### Normalised |weight| share by DINOv3 block
-
-
-**control** @ step 200,000 (`checkpoints/calibration/warmstart_control/checkpoint-200000/checkpoint.pth`) — largest block L23 at 57.1%; 0.0% of mass on the 17 non-stock blocks, 100.0% on mira's 7. Raw vector L2 1.1952, from an init of 1.1952 (unidentified scale — compare shares, not magnitudes).
-
-| block | L0 | L1 | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10 | L11 | L12 | L13 | L14 | L15 | L16 | L17 | L18 | L19 | L20 | L21 | L22 | L23 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| share % | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 7.1 | 0.0 | 7.1 | 0.0 | 7.1 | 0.0 | 7.1 | 0.0 | 7.1 | 0.0 | 7.1 | 0.0 | 57.1 |
-
-**learn7** @ step 80,000 (`checkpoints/calibration/warmstart_learn7/checkpoint-80000/checkpoint.pth`) — largest block L11 at 82.1%; 0.0% of mass on the 17 non-stock blocks, 100.0% on mira's 7. Raw vector L2 0.0337, from an init of 1.1952 (unidentified scale — compare shares, not magnitudes).
-
-| block | L11 | L13 | L15 | L17 | L19 | L21 | L23 |
-|---|---|---|---|---|---|---|---|
-| share % | 82.1 | 1.9 | 2.7 | 1.0 | 2.0 | 1.4 | 8.8 |
-
-**learned_mix** @ step 200,000 (`checkpoints/calibration/warmstart_learned_mix/checkpoint-200000/checkpoint.pth`) — largest block L0 at 45.7%; 92.4% of mass on the 17 non-stock blocks, 7.6% on mira's 7. Raw vector L2 0.0127, from an init of 1.1952 (unidentified scale — compare shares, not magnitudes).
-
-| block | L0 | L1 | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10 | L11 | L12 | L13 | L14 | L15 | L16 | L17 | L18 | L19 | L20 | L21 | L22 | L23 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| share % | 45.7 | 9.7 | 0.7 | 12.1 | 2.8 | 3.0 | 1.5 | 8.6 | 1.0 | 4.9 | 0.4 | 3.8 | 0.1 | 0.6 | 0.5 | 1.3 | 0.1 | 0.2 | 0.8 | 0.4 | 0.2 | 0.1 | 0.2 | 1.3 |

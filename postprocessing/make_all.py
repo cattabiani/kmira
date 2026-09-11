@@ -149,12 +149,74 @@ def run_metadata_table() -> str:
     return "\n".join(lines)
 
 
+def protocol_evidence() -> str:
+    """The two quantitative claims RESULTS.md section 2 makes about the protocol.
+
+    Stats-only: the figures they came from belong to the archived page, but the claims are about
+    the RIG rather than about any one study, so they stay on the live page -- and therefore have to
+    stay generated. Both read committed inputs only.
+    """
+    import plot_calibration
+    import plot_seed_effects
+
+    lines = ["### Why comparisons here are paired\n"]
+
+    # 1. How uneven is one 8,000-step data slice? Measured as the PSNR a chunk bought, per arm.
+    deltas = plot_seed_effects.seed_deltas()
+    # Read the spread off a PAIRED arm, where a chunk's gain or loss cannot be the intervention.
+    # Seeds 29-31 are excluded: they are the warm-restart transient (optimiser reset, LR raised
+    # again), which is a property of restarting, not of the data.
+    lo, hi = plot_seed_effects.RESTART
+    paired = {s: v for s, v in deltas["warmstart_control"].items() if not lo <= s <= hi}
+    ranked = sorted(paired.items(), key=lambda kv: kv[1], reverse=True)
+    best, worst = ranked[0], ranked[-3:]
+    lines += [
+        (
+            "Each 8,000-step chunk draws its stream from a per-chunk seed, so a seed identifies a "
+            "slice of training data. The slices are not equivalent.\n"
+        ),
+        (
+            f"Measured on `warmstart_control`, a paired arm over {len(paired)} chunks, so a chunk's "
+            f"gain or loss cannot be the intervention:\n"
+        ),
+        f"- best slice: **{best[1]:+.3f} dB** in one chunk (seed {best[0]})",
+        (
+            "- worst slices: "
+            + ", ".join(f"**{v:+.3f} dB** (seed {s})" for s, v in worst)
+        ),
+        (
+            "- and the ranking is a property of the slice, not of the run: the same seeds are best "
+            "and worst in runs that met them at completely different steps."
+        ),
+        "",
+    ]
+
+    # 2. The early calibration's effect-vs-noise ratio, which is why unpaired was abandoned.
+    _, cal = plot_calibration.build()
+    ratio = [ln for ln in cal.splitlines() if "effect / noise" in ln]
+    lines += [
+        (
+            "An early three-run study tried to resolve a published ~1.4 dB bottleneck effect with "
+            "one run per arm, and could not:\n"
+        ),
+        *ratio,
+        "",
+        (
+            "That study is not reported as a result -- one run per arm cannot estimate a spread, "
+            "and all three stopped undertrained. It is reported here only as the reason the "
+            "protocol is paired.\n"
+        ),
+    ]
+    return "\n".join(lines)
+
+
 def main() -> None:
     from lib import save
 
     sections: list[str] = [
         f"<!-- from make_all.py -->\n\n{setup_table()}",
         f"<!-- from make_all.py -->\n\n{run_metadata_table()}",
+        f"<!-- from make_all.py -->\n\n{protocol_evidence()}",
     ]
     figures = FIGURES + (ARCHIVED_FIGURES if "--archive" in sys.argv else [])
     for module_name, basename in figures:
