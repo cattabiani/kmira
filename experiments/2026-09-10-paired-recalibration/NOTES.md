@@ -1,4 +1,4 @@
-# Recalibration: the ablation and the seed, paired and run long
+# Recalibration: a new baseline, the ablation, and the seed
 
 **Status: pre-registered, not run. This is the project's highest-priority compute.** Written
 before either run exists, so the design and the falsification conditions are on record rather than
@@ -24,23 +24,64 @@ So the two numbers the whole benchmark leans on — *can it resolve a known bott
 and *how big is the seed spread* — are both unmeasured. Everything else in this repo is a
 comparison whose credibility depends on them. That is why this outranks Experiments 3 and 4.
 
-## Design: two runs, both questions
+## Design: three runs
 
-Two cold-started runs under the **baseline run's exact protocol**: constant LR 1e-4 after a
-1,000-step warmup, hourly chunks of 8,000 steps, one checkpoint and one 2048-frame scoring per
-chunk, **no anneal**. Nothing about the schedule differs between them or from the baseline run, so
-the comparisons are clean.
+Cold-started under one protocol: constant LR 1e-4 after a 1,000-step warmup, hourly chunks of
+8,000 steps, one checkpoint and one 2048-frame scoring per chunk, **no anneal**, and a per-chunk
+seed from the very first step. Nothing about the schedule differs between them, so the comparisons
+are clean.
 
-| arm | model | seed base | what it measures |
+| arm | model | seed base | role |
 |---|---|---|---|
-| `abl_baseline` | `baseline_image_base` | 1028 | — |
-| `abl_frozen` | `calib_frozen_bottleneck` | 1028 | ablation, *paired* against `abl_baseline` |
-| *(existing)* `plateau_baseline` | `baseline_image_base` | 28 | seed replicate for `abl_baseline` |
+| `baseline_v2` *(alias `abl_baseline`)* | `baseline_image_base` | 1028 | **the baseline** |
+| `abl_frozen` | `calib_frozen_bottleneck` | 1028 | ablation, *paired* against `baseline_v2` |
+| `baseline_v2_s2` | `baseline_image_base` | 2028 | seed replicate of `baseline_v2` |
 
-**The two new arms share seed base 1028 deliberately.** They are then paired chunk for chunk, so
-`abl_baseline − abl_frozen` is the frozen-bottleneck ablation with the seed spread cancelled — the
-thing A/B could not resolve. And because the existing baseline run used base 28, `abl_baseline`
-doubles as an independent-seed replicate of it. One pair of runs answers both questions.
+**`baseline_v2` and `abl_frozen` share seed base 1028 deliberately.** They are then paired chunk
+for chunk, so `baseline_v2 − abl_frozen` is the frozen-bottleneck ablation with the seed spread
+cancelled — the thing A/B could not resolve.
+
+**The seed replicate needs its own run (`baseline_v2_s2`), which was not the original plan.** The
+plan was to read `baseline_v2` against the existing baseline run, whose seed base is 28. That is
+dead: see "The legacy baseline is retired" below. The two runs differ by far more than a seed, so
+the comparison measures the bug, not the seed.
+
+## The legacy baseline is retired (2026-09-11)
+
+The original baseline run's first seven chunks all ran `run.seed=28` — the data-repetition bug.
+A chunk consumes ~41% of the stream and the seed fixes the shard traversal order, so those seven
+chunks replayed the **same 53.4% of the training data** seven times and **46.6% was never seen**
+until step 56,000. `baseline_v2` had a per-chunk seed from step 0 and reached **100% coverage**
+over the same seven chunks (measured by replaying the loader's own `_my_shards` / `rng` logic over
+the real index).
+
+The cost, at matched steps, accumulates inside the replay window and is then carried:
+
+| step | legacy baseline | `baseline_v2` | gap | Δgap |
+|---|---|---|---|---|
+| 8,000 *(both clean)* | 19.414 | 19.485 | +0.071 | |
+| 16,000 *(replay begins)* | 20.123 | 20.299 | +0.176 | +0.105 |
+| 32,000 | 20.829 | 21.956 | +1.127 | +0.920 |
+| 56,000 *(replay ends)* | 21.270 | 23.138 | +1.868 | +0.127 |
+| 88,000 | 21.731 | 23.795 | +2.065 | +0.033 |
+
+**+1.797 dB accumulated over the six replay chunks; +0.196 over the next four.** A ~9× difference
+in rate, which is the signature of a coverage deficit rather than a per-chunk sampling fluke — and
+it explains the persistence that ordinary seed variance could not.
+
+Consequences:
+
+- The legacy run's **training speed, its 272,000-step elbow and its 24.747 dB plateau are artifacts
+  of the bug**, not properties of this rig. None of them should be quoted as what the rig reaches
+  or how long it takes. `run_plateau.sh baseline` now refuses to run.
+- Its checkpoints stay on disk, with `RETIRED.md` beside them. `checkpoint-304000` is the
+  warm-start origin of the Experiment 1/2 arms, and `learn7` still has chunks to run from it.
+  Those results are **paired** — every arm shares that origin and seed schedule — so they remain
+  valid as *arm-to-arm* comparisons. What is invalid is the absolute baseline level.
+- `baseline_v2` reached 23.869 dB at 96,000, which the legacy run did not reach until roughly
+  200,000. So the elbow is likely to land much earlier and higher, and the "this rig plateaus at
+  24.747 where the paper's Base reaches 27.6" line in `postprocessing/RESULTS.md` is probably
+  understating the rig.
 
 ### What actually trains in `abl_frozen`
 
@@ -63,9 +104,9 @@ target — a large effect from a tiny, unambiguous change.
    Base decoder. *Falsified* if it comes out several times larger or smaller, which would say the
    reduced rig distorts the effect rather than shrinking with it.
 3. **The seed spread is usually small, with occasional large draws.** The 1.142 dB came from two
-   runs, which cannot estimate a spread at all. *Falsified* if `abl_baseline` and
-   `plateau_baseline` end more than ~0.5 dB apart at a matched step, which would mean unpaired
-   comparison is hopeless here at any length and every future study must be paired.
+   runs, which cannot estimate a spread at all. *Falsified* if `baseline_v2` and `baseline_v2_s2`
+   end more than ~0.5 dB apart at a matched step, which would mean unpaired comparison is hopeless
+   here at any length and every future study must be paired.
 
    Early evidence for the "occasional large draw" shape, from the first chunk of `abl_baseline`
    (2026-09-10): at comparable steps A (seed 28, cosine) sits at 0.7143 val loss, the baseline run
@@ -84,12 +125,10 @@ target — a large effect from a tiny, unambiguous change.
 
 ## Watch-outs
 
-- **The seed comparison is confounded, and by how much is not knowable in advance.** The existing
-  baseline run trained its first seven chunks (steps 0–56,000) on seed 28 repeatedly — the
-  data-repetition bug — while `abl_baseline` will get seven distinct chunks. So `abl_baseline`
-  minus `plateau_baseline` mixes the seed with early data coverage. If they land close, the bound
-  is still useful; if they land far apart, the cause is ambiguous and a third baseline run would be
-  needed to separate it. Say so rather than reporting it as a clean seed effect.
+- **This watch-out fired.** It was written as "the seed comparison against the legacy run is
+  confounded by early data coverage, and a third baseline run may be needed". It was confounded,
+  the confound was the dominant term, and the third run (`baseline_v2_s2`) is needed. Measured
+  rather than guessed: 53.4% coverage against 100%, worth ~1.9 dB.
 - **Do not call the ablation early.** This project has hit apparent plateaus twice, both traced to
   the seed schedule (0d). Pairing removes that for the *gap*, but each arm's own curve will still
   show the shape.
@@ -106,19 +145,22 @@ target — a large effect from a tiny, unambiguous change.
 One GPU, so the arms run sequentially. Slots accumulate, so any number of hours can be added later.
 
 ```bash
-bash codec/scripts/run_plateau.sh 8 abl_frozen      # 8h slot, repeat to target
-bash codec/scripts/run_plateau.sh 8 abl_baseline    # 8h slot, repeat to target
+bash codec/scripts/run_plateau.sh 8                  # baseline_v2 (default), currently running
+bash codec/scripts/run_plateau.sh 8 abl_frozen       # the ablation, paired with it
+bash codec/scripts/run_plateau.sh 8 baseline_v2_s2   # the seed replicate
 ```
 
 Cost per arm, at the measured 0.45 s/step plus 372s scoring per chunk:
 
-| target | chunks | per arm | both arms |
+| target | chunks | per arm | three arms |
 |---|---|---|---|
-| 96,000 (gap should be visible) | 12 | ~13.3h | ~26.6h |
-| 200,000 (matches the warm-start arms) | 25 | ~27.7h | ~55.3h |
-| 272,000 (matches the baseline run's elbow) | 34 | ~37.6h | ~75.2h |
+| 96,000 (gap should be visible) | 12 | ~13.3h | ~40h |
+| 200,000 (matches the warm-start arms) | 25 | ~27.7h | ~83h |
+| 272,000 (the legacy elbow, for reference only) | 34 | ~37.6h | ~113h |
 
-**Recommended: run both to 96,000 first (~27h total), then decide.** The gap is paired, so it
+`baseline_v2` is already past 96,000, so only the two new arms owe that.
+
+**Recommended: bring `abl_frozen` to 96,000 first (~13h), then `baseline_v2_s2` (~13h).** The gap is paired, so it
 should separate well before convergence; extending to 272,000 is only needed if hypothesis 1 looks
 marginal or if the seed comparison (which does need a matched elbow) becomes the priority.
 

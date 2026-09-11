@@ -53,9 +53,21 @@ protocol.
   steps, ~37.6h to the baseline's 272,000. This outranks Experiments 3 and 4 -- every result in the
   repo is a comparison whose credibility depends on these two numbers.
 
-- A calibrated, plateaued, annealed **baseline codec** is locked at
-  `checkpoints/calibration/plateau_baseline/checkpoint-304000` (304k steps, PSNR 24.88). This is
-  the fixed comparison point for every future variant.
+- **The baseline was replaced on 2026-09-11.** `checkpoints/calibration/plateau_baseline`
+  (`checkpoint-304000`, 304k steps, PSNR 24.88) is **RETIRED** -- see `RETIRED.md` beside it. Its
+  first seven chunks all ran `run.seed=28`, so steps 0-56,000 replayed the same **53.4%** of the
+  training data seven times and **46.6% was never seen**. Cost, measured against a clean run at
+  matched steps: **+1.87 dB by step 56,000**, accumulated inside the replay window and then
+  carried. Its training speed, its 272,000-step elbow and its 24.747 plateau are artifacts of that
+  bug -- never quote them as what this rig reaches or how long it takes.
+  `run_plateau.sh baseline` refuses to run.
+- The new baseline is **`baseline_v2`** (`checkpoints/calibration/ablation_baseline`, tags
+  `abl_baseline-*` -- the run was launched under the older name and the tag must stay continuous).
+  Per-chunk seeds from step 0, 100% data coverage, seed base 1028. Still training.
+- The retired checkpoints stay on disk because `checkpoint-304000` is the warm-start origin of the
+  Experiment 1/2 arms and `learn7` still has chunks to run from it. Those results stay valid as
+  **paired, arm-to-arm** comparisons -- every arm shares that origin and seed schedule. What is
+  invalid is the absolute baseline level they sit on.
 - **Experiment 1** (learned per-DINO-layer aggregation, replacing mira's fixed 7-layer mean) is
   **complete and it works**: both arms warm-started from the locked baseline and run to 200,000
   steps, `learned_mix` 27.905 dB against `control` 24.992 — a paired, matched-step **+2.914 dB**.

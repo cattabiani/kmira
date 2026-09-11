@@ -46,7 +46,7 @@ by those names throughout.
 
 | name | what it is | length | LR |
 |---|---|---|---|
-| **the baseline run** | mira's codec at this rig's scale, run to its elbow | 272,000 | constant 1e-4 |
+| **the baseline run** | mira's codec at this rig's scale, run to its elbow — **retired, see below** | 272,000 | constant 1e-4 |
 | **the anneal** | the baseline run's final phase, producing `checkpoint-304000` | +32,000 | cosine to 1e-6 |
 | **`control`, `learn7`, `learned_mix`** | the three warm-start arms of Experiments 1 and 2, all started from `checkpoint-304000` | 200,000 each | constant 1e-4 |
 
@@ -55,6 +55,29 @@ constant-LR reading, **24.747 dB** at step 272,000, and **"the annealed baseline
 304,000. Warm-start arms are read against the former — 0b says why.
 
 Per-run seeds, schedules and reading counts are in [`stats.md`](stats.md).
+
+### ⚠ The baseline run has been retired (2026-09-11)
+
+**Sections 0b and 0c below describe a run whose numbers are now known to be artifacts.** Its first
+seven chunks all ran a fixed `run.seed=28` — the data-repetition bug — so steps 0–56,000 replayed
+the same **53.4%** of the training data seven times and **46.6% of the dataset was never seen**.
+
+A clean replacement (`baseline_v2`, per-chunk seeds from step 0, 100% coverage) is training now,
+and at matched steps it is **+1.87 dB ahead by step 56,000** — a gap that accumulates almost
+entirely inside the replay window and is then carried. It reached 23.869 dB at 96,000, which the
+retired run did not manage until roughly 200,000.
+
+So do not read the following as properties of this rig:
+
+- the **272,000-step elbow** — a clean run looks likely to elbow much earlier,
+- the **24.747 dB plateau** and the annealed **24.885**, which are probably understating the rig,
+- anything about **training speed**.
+
+What survives, and why the sections are still here: **0c's finding that per-chunk data slices are
+wildly uneven is independent of the bug** — it is corroborated in the warm-start arms, which never
+replayed. And the Experiment 1 and 2 results below are **paired** comparisons whose arms all share
+this origin and seed schedule, so the arm-to-arm gaps stand; only the absolute level they sit on is
+suspect. These sections will be rebuilt on `baseline_v2` when it lands.
 
 ### Not on this page yet: the calibration
 
@@ -333,7 +356,8 @@ methodology. It is not established by anything on this page. Experiment 4 is wha
 ## Not comparable with the paper
 
 Every absolute number here is within-setup only. This rig is image-only and reduced-scale on one
-consumer GPU; its own faithful reproduction of mira's stock codec plateaus at 24.747 dB where the
-paper's Base decoder reaches 27.6. So `learned_mix`'s 27.905 is **not** "past the paper's Base
+consumer GPU; its own faithful reproduction of mira's stock codec plateaued at 24.747 dB where the
+paper's Base decoder reaches 27.6 — though that 24.747 is from the retired baseline run and is
+probably an understatement (see the retirement note in the foundation). So `learned_mix`'s 27.905 is **not** "past the paper's Base
 decoder", and the figures above are never to be read against the paper's tables. The one place
 published numbers appear is figure 5, where only the relative shape is used.

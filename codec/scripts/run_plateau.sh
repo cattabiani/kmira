@@ -10,16 +10,21 @@
 # 1e-4, hourly chunks, one checkpoint and one 2048-frame scoring per chunk, no anneal -- which is
 # the point: they are comparable because nothing about the schedule differs.
 #
-#   bash codec/scripts/run_plateau.sh 8               # baseline      (default; the locked baseline)
-#   bash codec/scripts/run_plateau.sh 8 abl_baseline  # baseline again, a NEW seed schedule
-#   bash codec/scripts/run_plateau.sh 8 abl_frozen    # bottleneck frozen at a random projection
+#   bash codec/scripts/run_plateau.sh 8                  # baseline_v2 (default): THE baseline
+#   bash codec/scripts/run_plateau.sh 8 baseline_v2_s2   # its second seed branch
+#   bash codec/scripts/run_plateau.sh 8 abl_frozen       # bottleneck frozen at a random projection
 #
-# WHY THE TWO NEW ARMS SHARE A SEED BASE. abl_baseline and abl_frozen both run seed base 1028, so
-# they are paired on data chunk for chunk and their difference is the frozen-bottleneck ablation
-# with the seed spread cancelled -- the thing the original A/B/C calibration could not resolve,
-# because it ran one unpaired run per arm. abl_baseline then doubles as a seed replicate of the
-# existing baseline run (seed base 28), which is the other number that study failed to pin down.
-# One pair of runs, both questions. See experiments/2026-09-10-paired-recalibration/NOTES.md.
+# THE BASELINE WAS REPLACED ON 2026-09-11. The legacy run (`baseline`, checkpoints/calibration/
+# plateau_baseline) trained its first seven chunks on a fixed run.seed=28 -- the data-repetition
+# bug -- so steps 0-56,000 replayed one 53.4% slice seven times and it never saw 46.6% of the
+# training data. Measured against baseline_v2, which had a per-chunk seed from step 0, that cost it
+# ~1.9 dB by step 56,000 and the deficit persisted. Its elbow, its training speed and its 24.747
+# plateau are therefore not representative and it is retired; the arm refuses to run.
+#
+# SEED BASES, and what each pairing measures:
+#   baseline_v2     1028  |  abl_frozen 1028  -> paired on data; difference IS the ablation
+#   baseline_v2_s2  2028                      -> independent seed; difference IS the seed spread
+# See experiments/2026-09-10-paired-recalibration/NOTES.md.
 #
 # STRUCTURE: an outer loop over hourly CHUNKS. Each chunk trains for an hour, validates, checkpoints
 # and scores -- all on the same step -- then moves on. An interruption loses at most the current
@@ -75,12 +80,42 @@ WARMUP=1000                          # only applies to the very first chunk; lat
 
 # Which arm. The default reproduces this script's original behaviour exactly -- same output dir,
 # same `plateau-*` tags, same seed base -- so the existing baseline run continues seamlessly.
-ARM="${2:-baseline}"
+ARM="${2:-baseline_v2}"
 case "$ARM" in
-  baseline)     NAME=plateau_baseline       MODEL=baseline_image_base     TAG=plateau       SEED_BASE=28 ;;
-  abl_baseline) NAME=ablation_baseline      MODEL=baseline_image_base     TAG=abl_baseline  SEED_BASE=1028 ;;
-  abl_frozen)   NAME=ablation_frozen_bneck  MODEL=calib_frozen_bottleneck TAG=abl_frozen    SEED_BASE=1028 ;;
-  *) echo "usage: $0 <whole hours> [baseline|abl_baseline|abl_frozen]   (got arm '$ARM')" >&2; exit 1 ;;
+  # THE BASELINE. Cold-started 2026-09-10 with a per-chunk seed schedule from the first step, so it
+  # sees 100% of the training data where the legacy run saw 53.4%. `abl_baseline` is an alias: the
+  # run was launched under that name and its benchmark.jsonl tags are `abl_baseline-*`, which must
+  # not change mid-run, so the tag keeps the old spelling while the arm gets the honest one.
+  baseline_v2|abl_baseline)
+    NAME=ablation_baseline      MODEL=baseline_image_base     TAG=abl_baseline    SEED_BASE=1028 ;;
+
+  # Second seed branch of the baseline: same config, an independent seed schedule. This is the
+  # seed-replicate measurement the legacy run cannot provide, because its gap against baseline_v2
+  # is dominated by the data-coverage bug rather than by the seed.
+  baseline_v2_s2)
+    NAME=baseline_v2_seed2      MODEL=baseline_image_base     TAG=baseline_v2_s2  SEED_BASE=2028 ;;
+
+  # Paired with baseline_v2 (same seed base, so the same data chunk for chunk): the frozen-random
+  # bottleneck ablation.
+  abl_frozen)
+    NAME=ablation_frozen_bneck  MODEL=calib_frozen_bottleneck TAG=abl_frozen      SEED_BASE=1028 ;;
+
+  # LEGACY, retired 2026-09-11. Do not extend it. Its first seven chunks all ran run.seed=28 (the
+  # data-repetition bug), so steps 0-56,000 replayed one 53.4% slice of the dataset seven times and
+  # 46.6% of the training data was never seen. Its training speed, its 272,000-step elbow and its
+  # 24.747 plateau are all artifacts of that, not properties of this rig. The checkpoints stay on
+  # disk because the Experiment 1/2 warm-start arms were started from checkpoint-304000 and are
+  # still valid as PAIRED comparisons -- they all share that origin.
+  baseline)
+    if [ "${KMIRA_ALLOW_LEGACY_BASELINE:-0}" != "1" ]; then
+      echo "REFUSING: 'baseline' is the retired pre-bugfix run (saw 53.4% of the data)." >&2
+      echo "          Use 'baseline_v2' for the baseline, or 'baseline_v2_s2' for its seed branch." >&2
+      echo "          Set KMIRA_ALLOW_LEGACY_BASELINE=1 only to re-score its existing checkpoints." >&2
+      exit 1
+    fi
+    NAME=plateau_baseline       MODEL=baseline_image_base     TAG=plateau         SEED_BASE=28 ;;
+
+  *) echo "usage: $0 <whole hours> [baseline_v2|baseline_v2_s2|abl_frozen]   (got arm '$ARM')" >&2; exit 1 ;;
 esac
 OUT="$PWD/checkpoints/calibration/$NAME"
 LOG="checkpoints/calibration/${NAME}.log"
