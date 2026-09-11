@@ -39,6 +39,44 @@ training speed. A smaller experiment carried to completion answers a question; a
 early answers none. When a proposal does not fit the GPU, cut the scope before cutting the
 protocol.
 
+## Plan of record: rebuild on the clean baseline (2026-09-11)
+
+The retired baseline invalidates every *absolute* number in the repo, so the studies are being
+redone on `baseline_v2`. Priced from the live run's measured 1.20 h per 8k chunk (cold) and 1.00 h
+(warm start), the full programme is **~154 h if `baseline_v2` elbows at 200,000, ~186 h at
+272,000** -- 6.5-8 days of continuous GPU. The elbow is genuinely unknown and may be *later* than
+the legacy 272,000, since a run seeing 100% of the data has more to learn, not less. The increment
+panel decides it, not a guess.
+
+Run in three phases so that value lands early rather than all at the end:
+
+**Phase 1 -- get a trustworthy baseline (~19 h).** Continue `baseline_v2` to its elbow, then anneal
+32,000 steps. Everything else is blocked on this, and on its own it already replaces the single
+most load-bearing number in the repo.
+
+**Phase 2 -- the calibration that never existed (~60 h).** `abl_frozen` (paired, seed base 1028)
+and `baseline_v2_s2` (seed base 2028), both to a matched step. This is the first time the benchmark
+will have a measured effect-vs-noise ratio at its own operating point.
+
+**Phase 3 -- redo Experiments 1 and 2 (~75 h).** `control`, `learned_mix`, then `learn7`, warm
+started from Phase 1's checkpoint, 200,000 steps each.
+
+Scope cuts available if time is short, in the order to take them:
+
+- **Drop or defer `learn7` (-25 h).** It only serves Experiment 2's freedom/reach split. The
+  headline Experiment 1 result needs `control` and `learned_mix` only, and the split is already
+  known directionally (reach dominates).
+- **Stop Phase 2's arms short of the elbow (-20 h or so).** The ablation gap is paired, so it
+  should read stably well before convergence; say at what step it was read.
+- **Skip the anneal (-4.8 h)** if no headline "rig quality" number is wanted. Warm-start arms reset
+  the optimizer and raise the LR, handing the anneal's ~+0.138 dB straight back, so they can start
+  from the pre-anneal elbow checkpoint and lose nothing.
+
+**Shelved: `learn7` at 96,000.** It was training toward a matched 200,000 against arms warm started
+from the retired baseline. Finishing it would spend ~13 h to produce a number on a foundation that
+is being replaced. Its scored rows stay in `benchmark.jsonl` and its findings stay in
+`postprocessing/RESULTS.md` as provisional; it restarts from scratch in Phase 3.
+
 ## Where things stand (as of the last commit)
 
 - **HIGHEST PRIORITY COMPUTE: the paired recalibration.** The benchmark has no working

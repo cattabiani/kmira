@@ -12,8 +12,9 @@ checkpoint. That file is the record but it is not readable — this page is the 
 pixi run python postprocessing/make_all.py
 ```
 
-**`learn7` is still training**, so its numbers move between sessions. Anything about the frontier of
-a running arm is therefore stated qualitatively here and quantitatively in
+**`learn7` was shelved mid-run at 96,000** (its warm-start origin has been retired), so its numbers
+are a snapshot of an unfinished arm. Anything about the frontier of such an arm is stated
+qualitatively here and quantitatively in
 [`stats.md`](stats.md), whose header carries the date it was generated. Prose that hardcoded "at
 64k, freedom is 20%" went stale twice inside a single afternoon; prose that says "freedom has
 stopped growing while reach has not" stays true and points at the table for the number.
@@ -317,11 +318,13 @@ looks like.
 
 Real measurements, but not yet quotable as results.
 
-### `learn7` is still running, and its numbers move
+### `learn7` is shelved at 96,000, so the split stays provisional
 
-It is being trained toward the other arms' 200,000 steps and is not there yet, so **every number
-involving `learn7` on this page is a snapshot** — check `stats.md`'s generation date. Two reasons
-the split is provisional in both directions:
+It was being trained toward the other arms' 200,000 steps and stopped at 96,000 when the baseline
+it warm-started from was retired — finishing it would have spent ~13h to land a number on a
+foundation that is being replaced. It restarts from scratch on `baseline_v2`. So **every number
+involving `learn7` on this page is a mid-run snapshot** — check `stats.md`'s generation date. Two
+reasons the split is provisional in both directions:
 
 - `learned_mix` had banked well under two-thirds of its eventual +2.914 dB by the point `learn7`
   has reached, so this is the stretch of the curve that turned out least representative of the
