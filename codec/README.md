@@ -69,79 +69,70 @@ Appendix Table 22 additionally ablates *which* DINO layers are aggregated — th
 
 ## Current state
 
-- **Locked reference baseline**: `checkpoints/calibration/plateau_baseline/checkpoint-304000`
-  (304,000 steps: 272,000-step constant-LR plateau + 32,000-step cosine anneal). PSNR 24.885
-  (`benchmark.jsonl` tag `anneal-304000`). The constant-LR plateau itself, **24.747** at step
-  272,000, is the number to compare a warm-started (constant-LR) run against — see the gotcha in
-  `../AGENTS.md` about why those two numbers answer different questions.
-- **Experiment 1** (learned per-DINO-layer aggregation,
-  `src/kmira/codec/variants/learned_layer_mix.py`): **complete, both arms at 200,000 steps.**
-  `learned_mix` 27.905 dB against `control` 24.992 dB — a paired, matched-step gain of
-  **+2.914 dB**. SSIM (0.8587 vs 0.8105), LPIPS (0.0820 vs 0.1059) and rFDD (0.6209 vs 0.6740) move
-  with it, but **P-DINO does not separate the arms at all** (−0.8% at 200k, sign flipping six times
-  across the run, against a ~20% within-arm swing). The gain is concentrated in PSNR, which is the
-  metric mira's own layer ablation shows to be *least* sensitive to layer choice — by 14x to 47x.
-  See `experiments/2026-08-13-learned-layer-mix/NOTES.md`, "P-DINO does not separate the arms".
+**The reference baseline was retired on 2026-09-11, and no absolute dB here should be quoted.**
+`checkpoints/calibration/plateau_baseline/checkpoint-304000` trained its first seven hourly chunks
+on a fixed `run.seed`, so it saw 53.4% of the dataset for 56,000 steps and never reached the rest
+(reproduce with `scripts/measure_data_coverage.py`). Its training speed, its 272,000-step elbow and
+its plateau are artifacts of that. `run_plateau.sh baseline` refuses to extend it; `RETIRED.md`
+sits beside the checkpoints.
 
-  Quote the arm-to-arm gap, not "+3.16 dB over the plateau". The control ends 0.245 dB above the
-  24.747 plateau it warm-started from rather than dead flat, so the pre-registered rule applies
-  (`experiments/2026-08-13-learned-layer-mix/NOTES.md`) and the matched-step gap is the result.
+**The new baseline is `baseline_v2`** (`checkpoints/calibration/ablation_baseline`, tags
+`abl_baseline-*`), cold-started with a per-chunk seed from step 0 and therefore 100% coverage.
+Still training. Its live trajectory is the one figure in `../postprocessing/RESULTS.md`.
 
-  The control's extension also closed the open question about the variant's jump at 104,000: both
-  arms show the same dip through 72k-96k and the same recovery at 104,000, so that shape belongs to
-  the shared seed schedule, not the intervention. The gap widens at 23 of 24 transitions, from
-  +0.236 at 8,000 to +2.914 at 200,000, still widening at the end but decelerating (+0.038/8k over
-  the last 40,000 steps, against +0.225/8k over the first 56,000). Check
-  `results/benchmark.jsonl` (tags `learned_mix-*` / `control-*`) for the numbers themselves.
+**Queued**, in order: finish `baseline_v2` to its elbow and anneal; then `abl_frozen` (the
+frozen-bottleneck ablation, sharing seed base 1028 so it is paired with `baseline_v2` on both
+initialisation and data) and `baseline_v2_s2` (seed base 2028, the run-to-run spread); then
+Experiments 1 and 2 redone. Costs and scope cuts are in `../AGENTS.md`; the design is pre-registered
+in `../experiments/2026-09-10-paired-recalibration/NOTES.md`.
 
-  **Compare within this rig, not against the paper.** The 27.6 Base-decoder row in the table above
-  is not a like-for-like target: this setup is image-only and reduced-scale, and its own faithful
-  baseline sits at 24.747 where the paper's Base decoder reaches 27.6. The defensible claim is the
-  delta against the locked baseline with its paired control, not crossing a number produced by a
-  different setup.
+**Experiment 1** (learned per-DINO-layer aggregation,
+`src/kmira/codec/variants/learned_layer_mix.py`) and **Experiment 2** (its freedom/reach
+decomposition) are **superseded, not discarded**. Their arms were paired against each other — same
+warm-start origin, same seed schedule, matched steps — so their *directions* hold: learned per-layer
+weights beat their control substantially, and most of that came from reaching shallower DINOv3
+blocks rather than from the weights being free. Their *magnitudes* rest on the retired baseline and
+are being remeasured. The write-up, figures and generated numbers are archived whole at
+`../postprocessing/archive/`.
 
-  **What changed**: the learned weights didn't reweight the paper's 7 blocks — they abandoned them.
-  At 200,000 steps **92.4% of the normalized mass sits on the 17 layers the stock formula never
-  reads**, 7.6% on the stock seven, with **layer 0** — the shallowest DINOv3 block — the largest
-  single share at 45.7% (84.6% by energy). Layer 23, which the stock formula deliberately
-  double-counts, fell from 1.1429 to 0.0003. Read the *normalized* direction, not the raw
-  magnitudes — the aggregation's overall scale and the bottleneck projection's norm have an exact
-  scaling symmetry that weight decay resolves arbitrarily, so only relative weight is identified.
-  (Earlier revisions of this file reported the 92% figure as mass on layer 0; it is the collective
-  share of the non-stock layers. Layer 0 dominates either way.)
+  **What changed, and it is the part that survives**: the learned weights didn't reweight the
+  paper's 7 blocks — they abandoned them, moving most of their normalized mass onto the 17 layers
+  the stock formula never reads, with DINOv3's shallowest block taking the largest single share,
+  while the deepest block the stock formula deliberately double-counts collapsed to near zero. Read
+  the *normalized* direction, not the raw magnitudes — the aggregation's overall scale and the
+  bottleneck projection's norm have an exact scaling symmetry that weight decay resolves
+  arbitrarily, so only relative weight is identified.
 
-  **Caveat before treating this as final**: the paper's own DINOv3-L layer choice (`sections/4.method.tex`)
-  keeps a residual on the deepest selected block specifically to retain semantics that shallow
-  features lack, reasoning that matters for the *world model* which later predicts forward in this
-  latent, not just for reconstruction. Their one layer-choice ablation (multi-layer vs. last-block-only,
-  `sections/appendix.tex`) shows the multi-layer choice winning on downstream world-model metrics
-  (gFID/gFVD/gFDD), not just reconstruction — real evidence that latent semantics affect the world
-  model, not just paranoia. Nothing in the paper tests the regime our result landed in (layer 0
-  dominant, deep residual nearly gone), so "beats the paper on reconstruction" and "will be a good
-  latent for the world model" are separate claims — only the first has evidence behind it so far.
+  **P-DINO never separated the arms**, which is the finding that makes this a reconstruction result
+  with an open question rather than an improvement: the gain concentrated in PSNR, the metric mira's
+  own layer ablation shows to be *least* sensitive to layer choice, while the benchmark's one paired
+  DINO-feature perceptual distance was indifferent between them.
+
+  **Compare within this rig, not against the paper.** The Base-decoder row in the table above is not
+  a like-for-like target: this setup is image-only and reduced-scale. The defensible claim is always
+  a delta against a baseline measured here with its paired control, never crossing a number produced
+  by a different setup.
 
 ## Running things
 
-**Calibration** (an attempt to recover the paper's known frozen-bottleneck effect, to decide
-whether the benchmark could be trusted before using it — it came back **TOO NOISY** at this run
-length, which is what forced the long paired protocol; see `postprocessing/RESULTS.md` 0b):
+**Baseline and calibration runs.** All three use one protocol — constant LR after a short warmup,
+hourly 8,000-step chunks, a checkpoint and a 2,048-frame scoring per chunk, a fresh seed per chunk —
+so they are directly comparable. Slots accumulate: re-run with more hours to extend an arm.
 
 ```bash
-bash codec/scripts/run_calibration.sh          # all three arms, ~2.2h each
-bash codec/scripts/run_calibration.sh 4000     # shorter probe, ~35 min each
+bash codec/scripts/run_plateau.sh 8                  # baseline_v2, the reference baseline
+bash codec/scripts/run_plateau.sh 8 abl_frozen       # frozen-bottleneck ablation, paired with it
+bash codec/scripts/run_plateau.sh 8 baseline_v2_s2   # second seed, for the run-to-run spread
+bash codec/scripts/run_anneal.sh                     # cosine-decay from wherever a run stopped
 ```
 
-Runs in the **foreground** — deliberately not detached, so it lives only as long as its terminal and
-leaves no orphaned process. Interrupted runs resume from the last checkpoint. Each arm scores its
-final checkpoint automatically and the script prints a signal-vs-noise verdict.
+Runs in the **foreground** — deliberately not detached, so an arm lives only as long as its terminal
+and leaves no orphaned process. Interrupted runs resume from the last checkpoint.
 
-**Plateau search + anneal** (constant LR located a stopping point at step 272,000; a further cosine
-anneal recovered +0.13 dB — this is how the locked baseline above was produced):
-
-```bash
-bash codec/scripts/run_plateau.sh          # ~8h per slot, extend by re-running with more hours
-bash codec/scripts/run_anneal.sh           # cosine-decay from wherever the plateau stopped
-```
+`run_calibration.sh` ran an earlier three-arm study (baseline, frozen bottleneck, baseline again at
+another seed) which came back **TOO NOISY**: one run per arm cannot estimate a spread, and all three
+stopped undertrained. That result is why the protocol above is paired, and the paired replacement is
+pre-registered in `../experiments/2026-09-10-paired-recalibration/NOTES.md`.
 
 **Scoring a checkpoint directly:**
 
@@ -154,7 +145,8 @@ python -m kmira.benchmark.eval_codec \
 Appends a row to `results/benchmark.jsonl`. `--n-frames 256` is a fast check, but ignore rFDD at
 that size (it fits a 768x768 covariance and is rank-deficient below ~2048 frames).
 
-**Experiment 1** (learned layer mix, warm-started from the locked baseline):
+**Experiment 1** (learned layer mix, warm-started from a baseline checkpoint — superseded, see
+"Current state"; it will be re-run from `baseline_v2`'s annealed checkpoint):
 
 ```bash
 bash codec/scripts/run_learned_layer_mix_warmstart.sh 8 learned_mix          # 8h more, variant only

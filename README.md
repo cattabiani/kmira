@@ -12,44 +12,45 @@ rather than vendoring the whole codec, so diffs against mira stay small and expl
 
 ## Where this is
 
-The codec benchmark is built, calibrated and running. The world model is untouched.
+The codec benchmark is built and characterised. A reference baseline is training now. The world
+model is untouched.
 
-**Locked baseline.** mira's stock codec, Base decoder, image-only, trained to `checkpoint-304000`:
-PSNR 24.885 after annealing, 24.747 at the constant-LR plateau. Every experiment here compares
-against that, not against the paper's published numbers. This setup is image-only and
-reduced-scale, so absolute values are not comparable with mira's own (the reference table in
-[codec/README.md](codec/README.md) says so explicitly, and the plateau is the number a warm-started
-run should be read against).
+**Current state, honestly.** The baseline this project measured against for its first month was
+retired on 2026-09-11: a data-loader seeding fault meant it trained on roughly half the available
+dataset for its first 56,000 steps, which makes its training speed, its elbow and its plateau
+artifacts rather than properties of the rig. A clean replacement is training now and the studies
+are being redone on it. **No absolute dB figure in this repository should be quoted yet.**
+
+**What is established.** The benchmark, the metrics, and the training protocol — in particular that
+comparisons here *must* be paired. Per-chunk data slices on this rig are strikingly uneven (the
+best 8,000-step slice observed is worth +0.795 dB against −0.177, −0.302 and −0.396 for
+the worst three), so an
+unpaired comparison measures the data draw as much as the intervention.
 
 **Experiment 1, learned per-layer DINO aggregation.** mira aggregates a fixed set of 7 DINOv3
 layers with uniform weights, RAEv2's k=7 default, adopted unchanged. Replacing that with 24 learned
-per-layer weights, initialised to reproduce the stock formula exactly, reached **27.905 dB against
-its paired control's 24.992 at a matched 200k steps — +2.914 dB**, with SSIM, LPIPS and rFDD
-improving alongside and P-DINO — the benchmark's one paired DINO-feature perceptual distance — not
-separating the arms at all. Both arms are now complete at 200k, so that gap rests on a control observed
-over the variant's full length rather than a quarter of it, and it is the control that makes the
-gain attributable to the aggregation rather than to the warm restart. Extending the control also
-showed that the variant's apparent takeoff at 104k is a feature of the shared seed schedule — both
-arms dip through 72k-96k and recover at 104k — while the gap itself widens steadily throughout.
+per-layer weights, initialised to reproduce the stock formula exactly, substantially improved
+reconstruction against its paired control, and a follow-up attributed most of that to gaining
+access to *shallower* DINOv3 blocks rather than to the weights being free. Those arms were paired
+against each other, so the **directions hold**; their **magnitudes rest on the retired baseline**
+and are being remeasured.
 
-**What that does not show.** This benchmark scores reconstruction only. The learned weights put
-92% of their normalized mass on the 17 layers mira's formula never reads — nearly half of it on
-DINOv3's shallowest block alone — and away from the deeper blocks mira keeps in order to preserve
-semantics for the world model that predicts in this latent.
-Whether the gain survives downstream is untested here, and there are reasons to expect it might
-not. Treat it as a reconstruction result with an open question attached, not as an improvement to
-MIRA.
+**What that does not show.** This benchmark scores reconstruction only. The learned weights did not
+reweight mira's layers — they largely *abandoned* them, moving mass onto blocks the stock formula
+never reads and away from the deeper ones mira keeps in order to preserve semantics for the world
+model that predicts in this latent. P-DINO, the benchmark's one paired DINO-feature perceptual
+distance, never separated the arms. Treat it as a reconstruction result with an open question
+attached, not as an improvement to MIRA.
 
 ## Where to look
 
-- **[postprocessing/RESULTS.md](postprocessing/RESULTS.md): the results, in figures.** Currently
-  **WIP** — the previous baseline was retired on 2026-09-11 (it trained on 53.4% of the data) and
-  the studies are being rebuilt on a clean one; the old page is at
-  [postprocessing/archive/RESULTS-legacy-baseline.md](postprocessing/archive/RESULTS-legacy-baseline.md).
-  Start here
-  if you want to know what came out rather than how to run it. Split into established and
-  provisional, with every number generated from `codec/results/benchmark.jsonl` rather than
-  written by hand — see [postprocessing/](postprocessing/) for how that is kept honest.
+- **[postprocessing/RESULTS.md](postprocessing/RESULTS.md): the results, in figures.** Start here
+  if you want to know what came out rather than how to run it. **WIP** while the studies are redone
+  on the new baseline; the superseded write-up is kept whole, with its figures and its own
+  generated numbers, at
+  [postprocessing/archive/](postprocessing/archive/RESULTS-legacy-baseline.md). Every number on
+  both pages is generated from `codec/results/benchmark.jsonl` and the training logs rather than
+  written by hand, and a test enforces it — see [postprocessing/](postprocessing/).
 - [codec/README.md](codec/README.md): current state of the codec work, how to run training and
   evaluation, the paper's reference numbers and the calibration targets.
 - [CHANGELOG.md](CHANGELOG.md): the narrative, what happened in what order and why.

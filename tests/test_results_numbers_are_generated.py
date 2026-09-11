@@ -17,6 +17,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).parent.parent / "postprocessing"
 
 # Numbers that are structure or provenance rather than measurements, so they have no reason to
@@ -43,9 +45,27 @@ def _numbers(text: str) -> set[str]:
     return {m.group(1).replace(",", "") for m in NUMBER.finditer(text)}
 
 
-def test_every_number_in_results_appears_in_stats() -> None:
-    results = (ROOT / "RESULTS.md").read_text()
+# README.md is the front door, so a stale number there is the most visible kind. It quotes far
+# fewer measurements than RESULTS.md but the same rule applies to the ones it does.
+PAGES = {
+    "postprocessing/RESULTS.md": ROOT / "RESULTS.md",
+    "README.md": ROOT.parent / "README.md",
+}
+README_ALLOWED = {
+    "7",  # mira's fixed 7-layer aggregation
+    "24",  # DINOv3-L/16's 24 blocks
+    "56000",  # the retired baseline's fixed-seed stretch, cited from its notes
+    "2026",  # the retirement date
+    "6.3",  # a section number in mira's paper
+    "2821",  # shards in the upstream dataset split, a property of the download
+}
+
+
+@pytest.mark.parametrize("page", sorted(PAGES))
+def test_every_number_quoted_appears_in_stats(page: str) -> None:
+    results = PAGES[page].read_text()
     stats = (ROOT / "stats.md").read_text().replace(",", "")
+    allowed = ALLOWED | (README_ALLOWED if page == "README.md" else set())
 
     # Token-bounded, not substring: "1.9" must not be satisfied by "21.9561" sitting in a table.
     # That false negative let a hand-rounded value through on the first run of this check.
@@ -55,9 +75,9 @@ def test_every_number_in_results_appears_in_stats() -> None:
                 return True
         return False
 
-    missing = sorted(n for n in _numbers(results) - ALLOWED if not present(n))
+    missing = sorted(n for n in _numbers(results) - allowed if not present(n))
     assert not missing, (
-        f"RESULTS.md quotes {missing} which do not appear in the generated stats.md.\n"
+        f"{page} quotes {missing} which do not appear in the generated stats.md.\n"
         "Either regenerate (pixi run python postprocessing/make_all.py), make the value generated, "
         "or -- if it is genuinely structural -- add it to ALLOWED with a reason."
     )
