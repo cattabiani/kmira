@@ -39,150 +39,78 @@ training speed. A smaller experiment carried to completion answers a question; a
 early answers none. When a proposal does not fit the GPU, cut the scope before cutting the
 protocol.
 
-## Plan of record: rebuild on the clean baseline (2026-09-11)
+## Where things stand, and what is next
 
-The retired baseline invalidates every *absolute* number in the repo, so the studies are being
-redone on `baseline_v2`. Priced from the live run's measured 1.20 h per 8k chunk (cold) and 1.00 h
-(warm start), the full programme is **~154 h if `baseline_v2` elbows at 200,000, ~186 h at
-272,000** -- 6.5-8 days of continuous GPU. The elbow is genuinely unknown and may be *later* than
-the legacy 272,000, since a run seeing 100% of the data has more to learn, not less. The increment
-panel decides it, not a guess.
+**The baseline was replaced on 2026-09-11, and that invalidates every absolute number in the
+repo.** `checkpoints/calibration/plateau_baseline` (`checkpoint-304000`) is **RETIRED** -- see
+`RETIRED.md` beside it. Its first seven chunks all ran `run.seed=28`, so it trained on 53.4% of the
+data for 56,000 steps and never saw the other 46.6%; measured at matched steps it was **1.868 dB**
+behind a clean run by the end of that. Its training speed, its 272,000-step elbow and its 24.747
+plateau are artifacts. `run_plateau.sh baseline` refuses to run. Reproduce the coverage with
+`codec/scripts/measure_data_coverage.py`.
 
-Run in three phases so that value lands early rather than all at the end:
+The new baseline is **`baseline_v2`** (`checkpoints/calibration/ablation_baseline`, tags
+`abl_baseline-*` -- launched under the older name, and the tag must stay continuous). Per-chunk
+seeds from step 0, 100% coverage, seed base 1028. **Still training.**
 
-**Phase 1 -- get a trustworthy baseline (~19 h).** Continue `baseline_v2` to its elbow, then anneal
-32,000 steps. Everything else is blocked on this, and on its own it already replaces the single
-most load-bearing number in the repo.
+The retired checkpoints stay on disk: `checkpoint-304000` is the warm-start origin of the
+Experiment 1/2 arms, whose results remain valid as **paired, arm-to-arm** comparisons -- every arm
+shares that origin and seed schedule. Only the absolute level they sit on is void. Those studies
+and their figures are archived under `postprocessing/archive/`; their surviving findings are
+summarised in `postprocessing/RESULTS.md` section 5.
 
-**Phase 2 -- the calibration that never existed (~60 h).** `abl_frozen` (paired, seed base 1028)
-and `baseline_v2_s2` (seed base 2028), both to a matched step. This is the first time the benchmark
-will have a measured effect-vs-noise ratio at its own operating point.
+### The rebuild, in three phases
 
-**Phase 3 -- redo Experiments 1 and 2 (~75 h).** `control`, `learned_mix`, then `learn7`, warm
-started from Phase 1's checkpoint, 200,000 steps each.
+Priced from the live run's measured 1.20 h per 8k chunk (cold) and 1.00 h (warm): **~154 h if
+`baseline_v2` elbows at 200,000, ~186 h at 272,000.** The elbow is unknown and may land *later*
+than the legacy 272,000 -- a run seeing 100% of the data has more to learn, not less. The increment
+panel decides it. Pre-registered in `experiments/2026-09-10-paired-recalibration/NOTES.md`.
 
-Scope cuts available if time is short, in the order to take them:
-
-- **Drop or defer `learn7` (-25 h).** It only serves Experiment 2's freedom/reach split. The
-  headline Experiment 1 result needs `control` and `learned_mix` only, and the split is already
-  known directionally (reach dominates).
-- **Stop Phase 2's arms short of the elbow (-20 h or so).** The ablation gap is paired, so it
-  should read stably well before convergence; say at what step it was read.
-- **Skip the anneal (-4.8 h)** if no headline "rig quality" number is wanted. Warm-start arms reset
-  the optimizer and raise the LR, handing the anneal's ~+0.138 dB straight back, so they can start
-  from the pre-anneal elbow checkpoint and lose nothing.
-
-**Shelved: `learn7` at 96,000.** It was training toward a matched 200,000 against arms warm started
-from the retired baseline. Finishing it would spend ~13 h to produce a number on a foundation that
-is being replaced. Its scored rows stay in `benchmark.jsonl` and its findings stay in
-`postprocessing/RESULTS.md` as provisional; it restarts from scratch in Phase 3.
-
-## Where things stand (as of the last commit)
-
-- **HIGHEST PRIORITY COMPUTE: the paired recalibration.** The benchmark has no working
-  demonstration that it can resolve an effect of the size it is asked to judge. The original
-  A/B/C study cannot provide one -- one run per arm, all three stopped undertrained at 15,299
-  steps, unpaired, effect 1.27x the seed spread against a required 3x. Two cold-started runs under
-  the baseline run's exact protocol replace it, and they answer both open questions at once:
-  `abl_frozen` and `abl_baseline` share seed base 1028 so the ablation is paired, and
-  `abl_baseline` doubles as an independent-seed replicate of the existing baseline run (base 28).
-  Pre-registered in `experiments/2026-09-10-paired-recalibration/NOTES.md`; run with
-  `bash codec/scripts/run_plateau.sh <hours> abl_frozen|abl_baseline`. ~13.3h per arm to 96,000
-  steps, ~37.6h to the baseline's 272,000. This outranks Experiments 3 and 4 -- every result in the
-  repo is a comparison whose credibility depends on these two numbers.
-
-- **The baseline was replaced on 2026-09-11.** `checkpoints/calibration/plateau_baseline`
-  (`checkpoint-304000`, 304k steps, PSNR 24.88) is **RETIRED** -- see `RETIRED.md` beside it. Its
-  first seven chunks all ran `run.seed=28`, so steps 0-56,000 replayed the same **53.4%** of the
-  training data seven times and **46.6% was never seen**. Cost, measured against a clean run at
-  matched steps: **+1.87 dB by step 56,000**, accumulated inside the replay window and then
-  carried. Its training speed, its 272,000-step elbow and its 24.747 plateau are artifacts of that
-  bug -- never quote them as what this rig reaches or how long it takes.
-  `run_plateau.sh baseline` refuses to run.
-- The new baseline is **`baseline_v2`** (`checkpoints/calibration/ablation_baseline`, tags
-  `abl_baseline-*` -- the run was launched under the older name and the tag must stay continuous).
-  Per-chunk seeds from step 0, 100% data coverage, seed base 1028. Still training.
-- The retired checkpoints stay on disk because `checkpoint-304000` is the warm-start origin of the
-  Experiment 1/2 arms and `learn7` still has chunks to run from it. Those results stay valid as
-  **paired, arm-to-arm** comparisons -- every arm shares that origin and seed schedule. What is
-  invalid is the absolute baseline level they sit on.
-- **Experiment 1** (learned per-DINO-layer aggregation, replacing mira's fixed 7-layer mean) is
-  **complete and it works**: both arms warm-started from the locked baseline and run to 200,000
-  steps, `learned_mix` 27.905 dB against `control` 24.992 — a paired, matched-step **+2.914 dB**.
-  Quote that gap, not "+3.16 over the plateau": the control ends 0.245 above the plateau rather
-  than flat, which is the pre-registered "climbs a little" branch, and its rule is to report the
-  matched-step gap. Do not compare either number to the paper's 27.6 Base-decoder row: different
-  setup, and this rig's own faithful baseline sits at 24.75 where the paper's reaches 27.6.
-  Extending the control also settled what it was run for — the variant's "takeoff at 104,000" is a
-  shared artifact of the seed schedule, since both arms dip through 72k-96k and recover at 104,000,
-  and the gap itself widens at 23 of 24 transitions independently of it. What remains open is
-  downstream, not attribution: the learned weights didn't reweight the paper's layers, they
-  abandoned them (92.4% of normalized mass on the 17 non-stock layers, 45.7% on layer 0 alone); the
-  paper's own reasoning for its layer choice is about preserving semantics *for the world model*,
-  and its one relevant ablation favors depth there too — so this is a demonstrated reconstruction
-  win with an open question about the downstream latent, not a settled improvement to MIRA. Two
-  things sharpen that: **P-DINO never separates the arms** (the gain is concentrated in PSNR, which
-  mira's own layer ablation shows is the metric *least* sensitive to layer choice, by 14x-47x), and
-  mira's stated methodology is to *select* codecs on downstream metrics while *training* them on
-  reconstruction — so the fixed layer set is best read as a **regularizer** encoding what the loss
-  cannot express, not as an untuned hyperparameter. On that reading, learning the weights removes a
-  constraint rather than tuning one, and the gain is predicted not to transfer. See
-  `codec/README.md`'s "Current state" and `codec/results/benchmark.jsonl` (tags `learned_mix-*` /
-  `control-*`) for the numbers — don't assume the outcome from this file.
-- Hardcoded paths were removed in favor of `direnv` (`.envrc`) + two env vars
-  (`RS_DINO_WEIGHTS_DIR`, `MIRA_TRAIN`) so the repo isn't tied to one machine.
-
-## Next, in order
-
-Step 1 (run the control to a matched length) is **done** — both arms sit at 200,000 steps and
-Experiment 1's attribution now rests on a full-length control. What follows is what is left.
-
-### 1. Experiment 2, `learn7` (priority; see `experiments/2026-09-08-decompose-layer-mix/NOTES.md`)
-
-Experiment 1 changed two things at once: the weights became *free*, and 17 shallower layers became
-*reachable*. The result — 92.4% of the mass landing on layers the stock formula never reads —
-points hard at reach, but that is inference, not measurement. `learn7` measures it: the same
-machinery with only the stock 7 weights trainable. `learn7` minus `control` is the value of
-freedom; `learned_mix` minus `learn7` is the value of reach.
-
-This matters more than tidiness, because reach is exactly what is in tension with mira's semantic
-rationale. If freedom alone recovers most of the gain, there is a version of this result that is
-compatible with the paper's layer choice instead of opposed to it.
-
-Scaffolding is in place. `learn7` is not a new class or a freezing mechanism — it is
-`VideoCodecLearnedLayerMix` with `expose_layers: [11,13,15,17,19,21,23]`, so it simply never reads
-the shallow blocks and its weight vector is 7 long rather than 24. Config at
-`codec/configs/model/learned_layer_mix_learn7.yaml`, a `learn7` arm in the launcher, tests pinning
-the exposure/zero-weight equivalence. What is left is the compute:
+1. **A trustworthy baseline (~19 h).** Finish `baseline_v2` to its elbow, then anneal 32,000 steps.
+   Everything is blocked on this.
+2. **The calibration that never existed (~60 h).** `abl_frozen` (seed base 1028, so it is paired
+   with `baseline_v2` chunk for chunk) and `baseline_v2_s2` (seed base 2028, the run-to-run
+   spread). Until these land, the benchmark has **no demonstration that it can resolve an effect of
+   the size it is asked to judge**, and that limitation is load-bearing for everything else.
+3. **Experiments 1 and 2 redone (~75 h).** `control`, `learned_mix`, then `learn7`, warm started
+   from phase 1.
 
 ```bash
-bash codec/scripts/run_learned_layer_mix_warmstart.sh 1 learn7    # 8k steps, ~1h + ~6min scoring
+bash codec/scripts/run_plateau.sh <hours>                  # baseline_v2
+bash codec/scripts/run_plateau.sh <hours> abl_frozen
+bash codec/scripts/run_plateau.sh <hours> baseline_v2_s2
 ```
 
-HOURS is relative and per arm: each invocation runs that many hours more from wherever the arm
-currently sits. Repeat to ~200,000 to match the other two arms, roughly 25 hourly chunks. There is
-no shortcut to a shorter run here — the gap between the existing arms was still widening at 200k,
-so a `learn7` stopped early would understate whichever component it measures.
+Scope cuts if time is short, in order: drop `learn7` (-25 h; Experiment 1's headline needs only
+`control` and `learned_mix`); stop phase 2 short of the elbow (-20 h; the gap is paired so it reads
+early, but say at what step); skip the anneal (-4.8 h; warm-start arms reset the optimiser and hand
+its ~+0.138 dB straight back, so they can start from the pre-anneal checkpoint).
 
-**Pre-registered outcomes** are in that NOTES.md and were written before the run. Read them there
-rather than deciding after the fact.
+**Shelved: `learn7` at 96,000.** It was heading for a matched 200,000 against arms warm started
+from the retired baseline. Its rows stay in `benchmark.jsonl`; it restarts in phase 3.
 
-### 2. Experiment 4, latent predictability (see `experiments/2026-09-10-latent-predictability/NOTES.md`)
+### What the archived studies found, and what is still open
 
-**Cheapest experiment on the list and the only one that addresses the open question**, so it ranks
-above Experiment 3 despite being written later. Nothing is retrained: the three arms stay frozen
-and a small next-step predictor is fitted on the latents they already produce, as evaluation
-apparatus. An afternoon, against ~25 h of GPU for a training arm.
+Experiment 1 replaced mira's fixed 7-layer mean with 24 learned per-layer weights and beat its
+paired control substantially; Experiment 2 attributed most of that to *reach* (shallower blocks
+becoming available) rather than *freedom* (the weights moving). Directions stand, magnitudes do
+not. The open question is downstream and unchanged by the retirement: the learned weights did not
+reweight mira's layers, they **abandoned** them, and mira's rationale for that layer set is about
+preserving semantics *for the world model*. **P-DINO never separated the arms**, and mira's stated
+methodology is to *select* codecs on world-model metrics while *training* them on reconstruction --
+so the fixed layer set reads as a **regularizer** encoding what the loss cannot express. On that
+reading the gain is predicted not to transfer downstream.
 
-It measures the property the reframing above turns on — whether the layer-0 latent is
-disproportionately harder to predict than mira's deep-ish one. Read `FVU` only alongside PSNR: a
-codec that encodes nothing is perfectly predictable, so the result is a point in
-`(PSNR, FVU)` space and the question is whether `learned_mix` moved along a frontier or off it.
+### Off the critical path
 
-### 3. Experiment 3, cold start (see `experiments/2026-09-08-cold-start-layer-mix/NOTES.md`)
-
-Its comparison arm already exists, since the locked baseline is itself a cold-start run under the
-same protocol. ~35 h of GPU for the plateau alone, which is why it sits behind the probe.
+- **Experiment 4, latent predictability** (`experiments/2026-09-10-latent-predictability/NOTES.md`)
+  -- the only queued work that addresses the open question above, and it retrains nothing: the
+  existing frozen arms plus a small next-step predictor as evaluation apparatus. An afternoon
+  against ~25 h for a training arm, and it can run on the archived arms because it is a paired
+  comparison between them. Read `FVU` only alongside PSNR: a codec that encodes nothing is
+  perfectly predictable.
+- **Experiment 3, cold start** (`experiments/2026-09-08-cold-start-layer-mix/NOTES.md`) -- needs
+  its own full plateau run, so it sits behind everything above.
 
 ## Conventions worth preserving
 
@@ -258,14 +186,14 @@ any of these costs real time or a real bug, so they live here rather than only i
   Never write checkpoints or large scratch files under `/tmp`.
 - **Annealing a converged constant-LR run to a low LR buys real dB, and a warm start gives it
   straight back.** A warm start (`finetune_from`) resets the optimizer and raises the LR again, so
-  it drops below the annealed number and spends tens of thousands of steps recovering. Compare a
-  constant-LR warm start against the pre-anneal plateau (24.747), not the post-anneal one (24.885).
-  This entry used to say a warm start "can never reach the annealed number no matter how long it
-  runs" — **that was too strong and is now measured false**: Experiment 1's control, which is the
-  locked baseline continued at constant LR, passed 24.885 and finished at 24.992 by step 200,000.
-  The rule of thumb still holds for reading a short run; the "never" did not. Corollary worth
-  keeping: the plateau called at 272,000 was a stopping point, not an asymptote — constant LR was
-  still buying ~+0.03 dB per 8k steps out at 200k.
+  it drops below the annealed number and spends tens of thousands of steps recovering. **Read a
+  constant-LR warm start against the pre-anneal plateau, never the post-anneal number.** Two
+  corrections this entry has already needed, both worth keeping: it once said a warm start "can
+  never reach the annealed number no matter how long it runs", which measurement falsified -- a
+  control arm passed it and kept going; and the elbow that plateau was called at was a stopping
+  point rather than an asymptote, with constant LR still buying ~+0.03 dB per 8k steps well beyond
+  it. (The specific dB in the original entry came from the retired baseline and have been removed;
+  the mechanism is what transfers.)
 - **`auto_weight` (on in every arm) rescales each perceptual term every step by the ratio of its
   gradient norm to the L1 anchor's, at the decoder's last layer** (VQ-GAN style, `codec/loss.py`).
   It is a per-step normalization, not a schedule and not a learned parameter, so it holds the loss
