@@ -52,9 +52,29 @@ training dynamics around 104k). `abl_frozen` cannot separate them, because it sh
 
 Either way, record it. This costs nothing extra: the run is already required for the seed spread.
 
-**`baseline_v2` and `abl_frozen` share seed base 1028 deliberately.** They are then paired chunk
-for chunk, so `baseline_v2 − abl_frozen` is the frozen-bottleneck ablation with the seed spread
+**`baseline_v2` and `abl_frozen` share seed base 1028 deliberately, and it buys more than shared
+data.** `train_codec.py` calls `torch.manual_seed(cfg.run.seed + rank)` *before* the model is
+built, and `VideoCodecFrozenBottleneck` only adds `requires_grad_(False)` after
+`super().__init__()`, so the RNG draw sequence is identical. The two runs therefore start from
+**bit-identical weights** and see **identical data in identical order**; the only difference
+between them is whether the bottleneck projection receives gradients. That is as clean as an
+ablation gets, and it is why `baseline_v2 − abl_frozen` is the effect with the seed spread
 cancelled — the thing A/B could not resolve.
+
+**Do not give `abl_frozen` its own seed base.** It was considered. It would lose the shared init
+*and* the shared data at once, which is exactly the A/B/C configuration that failed: a ~1.4 dB
+effect measured against a ~1.1 dB run-to-run spread. The question a different seed would have
+answered — slice versus step at the 104,000 false elbow — is already answered for free by
+`baseline_v2_s2`, below.
+
+**Free correctness check at step 0.** Because the init is shared, `abl_frozen`'s first validation
+reading must equal `baseline_v2`'s exactly:
+
+    step 0: loss_mae=0.5909, loss_lpips_perceptual=0.8842,
+            loss_dino_latent_consistency=0.0010, loss_total=1.4762
+
+If it does not, the pairing is broken — stop the run rather than spending ~30 h on a comparison
+that is not one.
 
 **The seed replicate needs its own run (`baseline_v2_s2`), which was not the original plan.** The
 plan was to read `baseline_v2` against the existing baseline run, whose seed base is 28. That is
