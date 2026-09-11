@@ -257,9 +257,10 @@ any of these costs real time or a real bug, so they live here rather than only i
   effect could not be distinguished from a substantially different one, and both arms stopped
   undertrained where mira's numbers are converged. Report what survives (B fell below *both*
   baseline draws, so the sign and rough scale hold) and not the coincidence.
-- **Calling a plateau/elbow needs several trailing readings, not one flat stretch.** This project
-  has hit real false plateaus more than once — a multi-hour flat stretch followed by a further jump
-  of over 1 dB. Stopping on the first flat reading has already cost real signal here. The usable
+- **Calling a plateau/elbow needs several trailing readings, not one flat stretch.** Three
+  occurrences so far, the most recent on the clean baseline where the seed schedule cannot be
+  blamed: its per-chunk increment fell to **+0.029 dB** at step 104,000 and the next chunk returned
+  **+0.199 dB**. Stopping on the first flat reading has already cost real signal here. The usable
   test is a ratio, not an eye: compare the trailing trend against the reading-to-reading spread over
   the same window. The calibration arms' trailing slope was ~10x shallower than their opening one
   and would pass any visual flatness check, but it was *smaller than the spread of their last six

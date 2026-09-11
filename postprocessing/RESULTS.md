@@ -99,8 +99,11 @@ Two caveats that are properties of the instrumentation, not of the model:
 
 - **`loss_dino_latent_consistency` has reached mira's four-decimal logging resolution.** Its flat
   line is rounding, not convergence; nothing about that term's ceiling can be read from this log.
-- **The elbow is unknown and may land late.** The increments are falling quickly, but that is also
-  what both false plateaus looked like.
+- **The elbow is unknown and may land late.** This run has already produced a false one: its
+  increment fell to **+0.029 dB** at step 104,000 — flat enough that three more readings like it
+  would have been called an elbow — and the very next chunk returned **+0.199 dB**. That is the
+  third time on this rig that a near-zero increment has been followed by a jump, and it is why the
+  rule is *several* trailing readings rather than one.
 
 ## 4. Queued
 
