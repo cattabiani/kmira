@@ -37,6 +37,21 @@ are clean.
 | `abl_frozen` | `calib_frozen_bottleneck` | 1028 | ablation, *paired* against `baseline_v2` |
 | `baseline_v2_s2` | `baseline_image_base` | 2028 | seed replicate of `baseline_v2` |
 
+**A second, free read on `baseline_v2_s2`, pre-registered before it runs.** `baseline_v2`'s
+per-chunk increment collapsed to +0.029 dB at step 104,000 and the next chunk returned +0.199 — a
+false elbow, and the first on this rig that the data-repetition bug cannot explain. Two candidate
+causes: the *slice* (seed 1041 is simply a poor 8,000 steps) or the *step* (something about
+training dynamics around 104k). `abl_frozen` cannot separate them, because it shares seed base
+1028 and therefore meets seed 1041 at step 104,000 too — step and seed are perfectly confounded.
+`baseline_v2_s2` is base 2028, so it meets *different* seeds at the *same* steps:
+
+- **`baseline_v2_s2` also dips near 104,000** → the cause is the step, and it is a property of this
+  training setup rather than of the data.
+- **It does not** → the cause is the slice, which is the same mechanism the archived section 0c
+  documented, now reproduced on clean data.
+
+Either way, record it. This costs nothing extra: the run is already required for the seed spread.
+
 **`baseline_v2` and `abl_frozen` share seed base 1028 deliberately.** They are then paired chunk
 for chunk, so `baseline_v2 − abl_frozen` is the frozen-bottleneck ablation with the seed spread
 cancelled — the thing A/B could not resolve.

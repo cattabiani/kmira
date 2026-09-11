@@ -674,6 +674,24 @@
           "constant_steps": 151000,
           "decay_steps": 0,
           "min_lr": 1e-06
+        },
+        {
+          "seed": 1044,
+          "steps": 128001,
+          "lr": 0.0001,
+          "warmup_steps": 1000,
+          "constant_steps": 239000,
+          "decay_steps": 0,
+          "min_lr": 1e-06
+        },
+        {
+          "seed": 1045,
+          "steps": 136001,
+          "lr": 0.0001,
+          "warmup_steps": 1000,
+          "constant_steps": 239000,
+          "decay_steps": 0,
+          "min_lr": 1e-06
         }
       ],
       "seeds_unique": [
@@ -692,7 +710,8 @@
         1041,
         1042,
         1043,
-        1044
+        1044,
+        1045
       ],
       "seed_schedule": [
         1029,
@@ -714,7 +733,9 @@
         1041,
         1042,
         1043,
-        1044
+        1044,
+        1044,
+        1045
       ],
       "schedule": "constant",
       "readings": [
@@ -1567,10 +1588,108 @@
         },
         {
           "step": 121000,
-          "loss_mae": 0.0592,
+          "loss_mae": 0.0593,
           "loss_lpips_perceptual": 0.1731,
           "loss_dino_latent_consistency": 0.0001,
           "loss_total": 0.2324
+        },
+        {
+          "step": 122000,
+          "loss_mae": 0.0611,
+          "loss_lpips_perceptual": 0.1757,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2369
+        },
+        {
+          "step": 123000,
+          "loss_mae": 0.0595,
+          "loss_lpips_perceptual": 0.1759,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2355
+        },
+        {
+          "step": 124000,
+          "loss_mae": 0.057,
+          "loss_lpips_perceptual": 0.173,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.23
+        },
+        {
+          "step": 125000,
+          "loss_mae": 0.0573,
+          "loss_lpips_perceptual": 0.1693,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2267
+        },
+        {
+          "step": 126000,
+          "loss_mae": 0.0571,
+          "loss_lpips_perceptual": 0.1688,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.226
+        },
+        {
+          "step": 127000,
+          "loss_mae": 0.0573,
+          "loss_lpips_perceptual": 0.1686,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2259
+        },
+        {
+          "step": 128000,
+          "loss_mae": 0.0595,
+          "loss_lpips_perceptual": 0.1712,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2308
+        },
+        {
+          "step": 129000,
+          "loss_mae": 0.059,
+          "loss_lpips_perceptual": 0.1717,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2308
+        },
+        {
+          "step": 130000,
+          "loss_mae": 0.0609,
+          "loss_lpips_perceptual": 0.1745,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2356
+        },
+        {
+          "step": 131000,
+          "loss_mae": 0.0593,
+          "loss_lpips_perceptual": 0.1747,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2341
+        },
+        {
+          "step": 132000,
+          "loss_mae": 0.0568,
+          "loss_lpips_perceptual": 0.1716,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2284
+        },
+        {
+          "step": 133000,
+          "loss_mae": 0.057,
+          "loss_lpips_perceptual": 0.1681,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2252
+        },
+        {
+          "step": 134000,
+          "loss_mae": 0.0568,
+          "loss_lpips_perceptual": 0.1675,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2244
+        },
+        {
+          "step": 135000,
+          "loss_mae": 0.057,
+          "loss_lpips_perceptual": 0.1673,
+          "loss_dino_latent_consistency": 0.0001,
+          "loss_total": 0.2244
         }
       ]
     },
