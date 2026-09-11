@@ -231,6 +231,14 @@ any of these costs real time or a real bug, so they live here rather than only i
   script that restarts training in chunks (to checkpoint/score hourly, say) with a fixed seed
   replays the *identical* data stream on every restart. Vary the seed per chunk (see
   `run_plateau.sh`, `run_learned_layer_mix_warmstart.sh`).
+  **"Replays the same data" badly understates the damage, and this cost the project a month.** The
+  seed fixes each worker's shard traversal ORDER, and a chunk ends before it has walked all of it,
+  so a fixed seed pins the same prefix forever and the rest of the dataset is *never reached*.
+  Measured with `codec/scripts/measure_data_coverage.py` (which replays the loader's own
+  `_my_shards`/`rng` logic): the first baseline's seven fixed-seed chunks saw **53.4%** of the
+  training data and never touched the other **46.6%**, where per-chunk seeds reach **100%** over the
+  same span. It was ~1.9 dB behind a clean run by step 56,000 and that whole baseline had to be
+  retired. If a run's seed schedule is ever in doubt, run that script before trusting the run.
 - **`CodecLoss.bind_encoder_dino` derives the DINO latent-consistency loss's layer set from the
   encoder's own layers.** Changing which DINO layers the encoder reads silently changes the
   training *objective* too, not just the aggregation — unless pinned
@@ -295,6 +303,32 @@ any of these costs real time or a real bug, so they live here rather than only i
   the optimiser.** Consequences: an elbow judged on trailing readings is confounded by which seeds
   those readings landed on (compare like seeds, or average over a run of them), and this unevenness
   is the reason pairing works at all — it lands on both arms and cancels.
+- **NEVER edit a launcher script that is currently running.** bash reads a script lazily, by byte
+  offset, so an in-place rewrite (anything that truncates and rewrites the same inode -- `Write`,
+  `sed -i`, Python `write_text`) makes the running shell resume mid-file at the wrong offset and
+  execute garbage. Write the new version to a temp file and `mv` it into place: the rename swaps
+  the inode and the running process keeps reading the old one. Check with `ls -i` before and after.
+- **Piping a launcher into `head` does not "just show the banner" -- it starts training.** These
+  scripts run in the foreground and begin their first chunk immediately; `head` closing the pipe
+  only sends SIGPIPE afterwards, and `tee` to the logfile can swallow even that. This actually
+  launched an unwanted run once, which then had to be killed and its output directory cleaned up.
+  To inspect a launcher, read it (`sed -n`, `grep`) or check its syntax (`bash -n`). To exercise
+  argument handling, use a path that exits before training, such as an invalid argument.
+- **mira's validation loader is hardcoded `seed=37`, independent of `run.seed`** (`train_codec.py`,
+  the `val_loader = create_loader(...)` call). So validation losses ARE comparable across runs with
+  different seeds -- worth knowing before spending time on the hypothesis that a cross-run val-loss
+  gap is a sampling artifact. It is not; it is the model.
+- **mira logs validation losses to four decimal places.** A term small enough to sit on that grid
+  stops being a curve and becomes a staircase, and its trailing slope is then rounding rather than
+  training. `loss_dino_latent_consistency` runs ~1e-4 here and is already pinned at `0.0001`, so
+  nothing about its convergence can be read from the log. Say so on the figure rather than letting
+  a flat line be read as a ceiling.
+- **One run per arm cannot estimate a spread, so a matching point estimate is not a reproduction.**
+  The first calibration measured A-B = +1.4489 dB against mira's published ~1.4 and it was tempting
+  to call the effect reproduced. It is not evidence: the seed spread |A-C| was 1.142 dB, so the
+  effect could not be distinguished from a substantially different one, and both arms stopped
+  undertrained where mira's numbers are converged. Report what survives (B fell below *both*
+  baseline draws, so the sign and rough scale hold) and not the coincidence.
 - **Calling a plateau/elbow needs several trailing readings, not one flat stretch.** This project
   has hit real false plateaus more than once — a multi-hour flat stretch followed by a further jump
   of over 1 dB. Stopping on the first flat reading has already cost real signal here. The usable
