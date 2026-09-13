@@ -134,6 +134,20 @@ another seed) which came back **TOO NOISY**: one run per arm cannot estimate a s
 stopped undertrained. That result is why the protocol above is paired, and the paired replacement is
 pre-registered in `../experiments/2026-09-10-paired-recalibration/NOTES.md`.
 
+**Freeing a finished arm's checkpoints** (one per chunk is ~1.6GiB after the launchers prune the
+resume-only half, so a 200,000-step arm holds ~42GiB):
+
+```bash
+pixi run python codec/scripts/prune_arm_checkpoints.py ablation_baseline            # dry run
+pixi run python codec/scripts/prune_arm_checkpoints.py ablation_baseline --delete   # asks first
+```
+
+It deletes only checkpoints whose metrics are already in `results/benchmark.jsonl` and whose run
+curve is already in `../postprocessing/data/run_metadata.json`; anything unscored is refused. The
+newest checkpoint and any `--keep <step>` are never touched. Those two JSON files are committed and
+kept indefinitely, so a pruned arm keeps its dB curve, its validation curve and its seed schedule
+— only the weights go.
+
 **Scoring a checkpoint directly:**
 
 ```bash

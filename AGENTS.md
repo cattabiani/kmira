@@ -227,6 +227,16 @@ any of these costs real time or a real bug, so they live here rather than only i
   `step % keep_permanent_every == 0`, and permanent checkpoints are excluded from the temporary
   list. Chunk boundaries are multiples of `CHUNK`, so `run.checkpoint_keep_permanent_every=$CHUNK`
   keeps exactly one per chunk, forever. Both chunked launchers now do this.
+- **Free an arm's checkpoints with `codec/scripts/prune_arm_checkpoints.py`, never with `rm`.**
+  Keeping one checkpoint per chunk is right *while* an arm is live -- it is what allows any step to
+  be re-scored when a metric changes -- and wrong once it is settled. The script only deletes a
+  checkpoint whose numbers are already committed: its metrics present in `benchmark.jsonl` and the
+  run's curve and seeds present in `postprocessing/data/run_metadata.json`. Anything unscored is
+  **refused**, not deleted, even under `--delete --yes`. The newest checkpoint (the resume point)
+  and anything named by `--keep` (e.g. a warm-start origin) are never offered. Dry run by default.
+  **Metadata is never pruned**: `benchmark.jsonl` and `run_metadata.json` are committed and kept
+  indefinitely, so a pruned arm keeps its dB curve, its validation curve and its seed schedule
+  forever -- only the weights go.
 - **A checkpoint is two files and you usually need only one of them.** `checkpoint.pth` is 1.56GiB
   (model weights — all that `eval_codec` and `finetune_from` read) and `training_state.pth` is
   2.83GiB (optimizer/scheduler/EMA — read only by `continue_from`, which always resumes the
