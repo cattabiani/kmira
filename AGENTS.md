@@ -215,12 +215,23 @@ any of these costs real time or a real bug, so they live here rather than only i
   scored rows plus each chunk's resolved seed and LR schedule, and `checkpoints/` is gitignored --
   so the launchers now call `postprocessing/extract_run_metadata.py` at the end of a session to
   persist it. A few hundred kB of committed JSON against data that is otherwise unrecoverable.
-- **`checkpoint_keep_recent` decides whether a run's trajectory can EVER be scored.** It defaults
-  to 1 in `codec/configs/kmira_train_codec.yaml`, so intermediate checkpoints are deleted as
-  training advances and a run scored only at the end can never be given a curve afterwards — the
-  three calibration arms are permanently one point each for exactly this reason. If a run's shape
-  might matter later, either raise `checkpoint_keep_recent` or score inline per chunk the way the
-  plateau and warm-start launchers do. Disk is the trade: each checkpoint is ~4.4GB.
+- **`checkpoint_keep_recent` DOES NOTHING in a chunked run. Use `checkpoint_keep_permanent_every`.**
+  mira's `CheckpointManager` flags a chunk's last save `final`, and the `final` branch deletes every
+  *temporary* checkpoint it knows about regardless of `keep_recent`
+  (`mira/src/mira/training/checkpoint_manager.py`). Each chunk here is its own process training
+  exactly to `run.steps`, so every chunk ends `final` and wipes the previous chunk's checkpoint.
+  That is why every run directory in this project held exactly **one** checkpoint while
+  `keep_recent=6` was being passed — for months, unnoticed, and it is also why the three
+  calibration arms are permanently one scored point each.
+  What survives is a **permanent** checkpoint: `_is_permanent(step)` is
+  `step % keep_permanent_every == 0`, and permanent checkpoints are excluded from the temporary
+  list. Chunk boundaries are multiples of `CHUNK`, so `run.checkpoint_keep_permanent_every=$CHUNK`
+  keeps exactly one per chunk, forever. Both chunked launchers now do this.
+- **A checkpoint is two files and you usually need only one of them.** `checkpoint.pth` is 1.56GiB
+  (model weights — all that `eval_codec` and `finetune_from` read) and `training_state.pth` is
+  2.83GiB (optimizer/scheduler/EMA — read only by `continue_from`, which always resumes the
+  *latest*). So the launchers prune `training_state.pth` from every checkpoint but the newest after
+  each chunk: a 200,000-step arm costs **42GiB instead of 110GiB** and stays fully re-scorable.
 - **The per-chunk seed is an identity for a slice of data, and the slices are very uneven.** A
   chunk resolves `run.seed = 28 + step/8000`, and mira's loader reseeds per process start, so that
   seed selects the whole 8,000-step stream the chunk trains on. Measured across all four runs

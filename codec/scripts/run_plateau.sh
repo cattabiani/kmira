@@ -37,19 +37,25 @@
 # 15min, as a divisor of the hour) because it is cheap and the elbow is easier to locate with more
 # points; scoring stays hourly because it is not cheap.
 #
-# A ROLLING WINDOW of the last KEEP_RECENT hourly checkpoints is kept (4.7GB each, so ~28GB flat,
-# whether the run is 12h or 48h). The window is sized by the elbow detector's lag, not by taste: its
-# criterion is trailing over 2h, so when it reports an elbow at hour X the model actually wanted is
-# somewhere in hours X-2..X. Six hours of history covers that with margin.
+# KEEP ONE CHECKPOINT PER CHUNK, PERMANENTLY -- and note that `checkpoint_keep_recent` CANNOT do
+# this. mira's CheckpointManager marks a chunk's last save `final`, and the final branch deletes
+# every *temporary* checkpoint it knows about, `keep_recent` notwithstanding
+# (mira/src/mira/training/checkpoint_manager.py). Since each chunk here is its own process that
+# trains exactly to `run.steps`, every chunk ends `final` and wipes the previous chunk's
+# checkpoint. That is why every run directory in this project held exactly ONE checkpoint despite
+# `keep_recent=6` being passed for months.
 #
-# Keeping ALL of them (146GB at 31h) was considered and dropped: past the elbow window, an old
-# checkpoint only helps if the EVAL changes and we want to re-score without retraining, if the
-# newest is corrupted mid-write, or if we want to branch a run from the middle -- all rare, and none
-# of them help against a TRAINING bug, which sends you back to step 0 whatever is on disk.
+# What survives that branch is a PERMANENT checkpoint: `_is_permanent(step)` is
+# `step % keep_permanent_every == 0`, and permanent checkpoints are excluded from the temporary
+# list entirely. Chunk boundaries are multiples of CHUNK, so setting this to CHUNK makes exactly
+# one checkpoint per chunk permanent and keeps the whole trajectory. `run.checkpoint_keep_recent`
+# is no longer passed at all, because it cannot affect a chunked run.
 #
-# This only works because the elbow is checked after EVERY chunk (see the report call in the loop):
-# a window is useless if you notice the elbow after it has already scrolled out of it.
-KEEP_RECENT=6
+# Cost, and why it is worth it: a checkpoint dir is 4.4GiB, of which `checkpoint.pth` is 1.56GiB
+# (model weights -- all that scoring and warm-starting need) and `training_state.pth` is 2.83GiB
+# (optimizer/scheduler/EMA -- only ever needed to resume THIS run, i.e. only for the newest one).
+# So after each chunk we drop `training_state.pth` from every checkpoint but the newest, which
+# turns a 200k run from 110GiB into 42GiB and keeps every checkpoint re-scorable forever.
 #
 # WHY SLOTS WORK HERE: the LR is CONSTANT (after a short warmup), so there is no schedule to
 # interrupt -- every checkpoint is a valid model and stopping is free. Under mira's default cosine
@@ -189,6 +195,25 @@ score_checkpoint () {
   exit 1
 }
 
+# Drop the resume-only half of every checkpoint except the newest. Safe by construction: mira reads
+# `training_state.pth` only in `continue_from`, which resolves the LATEST checkpoint, and that one
+# is always kept. `checkpoint.pth` -- what eval_codec and `finetune_from` read -- is never touched.
+prune_training_state () {
+  local newest
+  newest="$(ls -d "$OUT"/checkpoint-*/ 2>/dev/null | sort -V | tail -1)"
+  [ -z "$newest" ] && return 0
+  local freed=0 d
+  for d in "$OUT"/checkpoint-*/; do
+    [ "$d" = "$newest" ] && continue
+    if [ -f "$d/training_state.pth" ]; then
+      freed=$((freed + $(stat -c%s "$d/training_state.pth") / 1073741824))
+      rm -f "$d/training_state.pth"
+    fi
+  done
+  [ "$freed" -gt 0 ] && echo "--- pruned ~${freed}GiB of resume-only state from older checkpoints"
+  return 0
+}
+
 # Targets live on the CHUNK GRID (multiples of CHUNK), not relative to wherever the last checkpoint
 # happens to sit. If a checkpoint is ever slightly off-grid -- as happened when an off-by-one in
 # run.steps left a checkpoint-7999 -- planning relative to it would propagate that offset to every
@@ -207,15 +232,17 @@ echo "   already done : $DONE steps"
 echo "   this slot    : +$((TOTAL - DONE)) steps -> $TOTAL total, in $N_CHUNKS chunks of $CHUNK"
 echo "   per hour     : $CHUNK steps, $VAL_PER_HOUR validations (every $VAL_EVERY), one checkpoint, one scoring (~$((SCORE_SECONDS / 60))min)"
 echo "   wall clock   : ~${WALL}h including scoring"
-echo "   checkpoints  : rolling last $KEEP_RECENT (~$((KEEP_RECENT * 47 / 10))GB, flat regardless of slot length)"
+echo "   checkpoints  : one per chunk, KEPT (~1.6GiB each after pruning resume-only state)"
 echo "   started      : $(date '+%H:%M:%S')"
 echo "=================================================================="
 
-# Flat footprint, but check anyway: dying 30h in on a full disk is a bad way to find out.
-NEED_GB=$((KEEP_RECENT * 47 / 10 + 20))
+# The footprint GROWS now (one permanent checkpoint per chunk), so check against what this slot
+# will add rather than against a fixed window. ~1.56GiB per chunk after pruning, plus the newest
+# checkpoint's full 4.4GiB, plus headroom.
+NEED_GB=$(( N_CHUNKS * 2 + 10 ))
 FREE_GB=$(df -BG --output=avail . | tail -1 | tr -d ' G')
 if [ "$FREE_GB" -lt "$NEED_GB" ]; then
-  echo "ABORT: need ~${NEED_GB}GB (${KEEP_RECENT} checkpoints + headroom), only ${FREE_GB}GB free." >&2
+  echo "ABORT: this slot needs ~${NEED_GB}GB (one 1.56GiB checkpoint per chunk + headroom), only ${FREE_GB}GB free." >&2
   exit 1
 fi
 
@@ -308,8 +335,7 @@ while [ "$(current_step)" -lt "$TOTAL" ]; do
       run.batch_size=4 \
       run.compile=false \
       run.checkpoint_every="$CHUNK" \
-      run.checkpoint_keep_permanent_every=-1 \
-      run.checkpoint_keep_recent="$KEEP_RECENT" \
+      run.checkpoint_keep_permanent_every="$CHUNK" \
       validation.val_every="$VAL_EVERY" \
       validation.val_n_samples=512 \
       validation.val_first=$([ "$DONE" -eq 0 ] && echo true || echo false) \
@@ -349,6 +375,11 @@ while [ "$(current_step)" -lt "$TOTAL" ]; do
   # Check for the elbow after every chunk, not just at the end of the slot. Retention is a rolling
   # 6h window, so a detection noticed only at slot end could refer to a checkpoint already deleted.
   # Just the verdict here; the full curve is printed once the slot finishes.
+  # Keep the weights of every chunk, but only the newest optimizer state: `training_state.pth` is
+  # 2.83GiB of the 4.4GiB and is only ever read by `continue_from`, which only ever resumes the
+  # latest. Scoring and warm-starting read `checkpoint.pth` alone.
+  prune_training_state
+
   "$PIXI" run python codec/scripts/plateau_report.py "$LOG" 2>&1 | tail -4
 done
 

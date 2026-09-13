@@ -34,8 +34,13 @@ run:
   checkpoint_every: "10%"  # bounds a crash to ~12 min of lost work on a 2h run. Each save is a
   # ~4.4GB write, so 10 saves per arm is ~132GB across three arms -- under 0.2% of a consumer SSD's
   # rated endurance, which is a fair price for not losing an unattended overnight run. Disk *usage*
-  # stays at one checkpoint (~4.4GB) regardless, because checkpoint_keep_recent=1 deletes the
-  # previous one. (100% would mean the only checkpoint is the final one: no crash recovery at all.)
+  # stays at one checkpoint (~4.4GB) regardless. (100% would mean the only checkpoint is the final
+  # one: no crash recovery at all.)
+  #
+  # NOTE this knob is inert for the chunked launchers. mira deletes every *temporary* checkpoint on
+  # a chunk's `final` save whatever `keep_recent` says, and each chunk is its own process ending
+  # `final`. To keep a trajectory, set `checkpoint_keep_permanent_every` instead -- `run_plateau.sh`
+  # and `run_learned_layer_mix_warmstart.sh` pass `=$CHUNK`. See ../../AGENTS.md.
   checkpoint_keep_recent: 1
   checkpoint_keep_permanent_every: -1
   log_every: "1%"

@@ -113,6 +113,21 @@ current_step () {
   fi
 }
 
+# Drop the resume-only half of every checkpoint but the newest. `training_state.pth` is 2.83GiB of
+# a checkpoint's 4.4GiB and is read only by `continue_from`, which always resumes the LATEST -- and
+# that one is kept. `checkpoint.pth`, which eval_codec and `finetune_from` read, is never touched.
+# Without this, keeping one checkpoint per chunk would cost 110GiB per 200k arm instead of 42GiB.
+prune_training_state () {
+  local out="$1" newest
+  newest="$(ls -d "$out"/checkpoint-*/ 2>/dev/null | sort -V | tail -1)"
+  [ -z "$newest" ] && return 0
+  local d
+  for d in "$out"/checkpoint-*/; do
+    [ "$d" = "$newest" ] || rm -f "$d/training_state.pth"
+  done
+  return 0
+}
+
 score_checkpoint () {
   local out="$1" tag_prefix="$2" step="$3"
   if [ "$step" -eq 0 ]; then return 0; fi
@@ -161,6 +176,7 @@ run_arm () {
   while [ "$(current_step "$out")" -lt "$total" ]; do
     local done_step; done_step="$(current_step "$out")"
     score_checkpoint "$out" "$tag_prefix" "$done_step"
+    prune_training_state "$out"
 
     local next=$((done_step + CHUNK)); [ "$next" -gt "$total" ] && next="$total"
     chunk_n=$((chunk_n + 1))
@@ -192,8 +208,7 @@ run_arm () {
         run.batch_size=4 \
         run.compile=false \
         run.checkpoint_every="$CHUNK" \
-        run.checkpoint_keep_permanent_every=-1 \
-        run.checkpoint_keep_recent=6 \
+        run.checkpoint_keep_permanent_every="$CHUNK" \
         validation.val_every="$VAL_EVERY" \
         validation.val_n_samples=512 \
         validation.val_first=$([ "$done_step" -eq 0 ] && echo true || echo false) \
@@ -225,6 +240,7 @@ run_arm () {
   done
 
   score_checkpoint "$out" "$tag_prefix" "$(current_step "$out")"
+  prune_training_state "$out"
 }
 
 START=$(date +%s)
