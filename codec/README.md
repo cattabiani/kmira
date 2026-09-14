@@ -133,6 +133,18 @@ same schedule instead of re-basing the decay onto the newer checkpoint and never
 relaunch with a different number of hours is refused; delete that file to abandon the anneal and
 start a fresh one from the current step.
 
+While a chunk runs, a background ticker appends a progress line every ten minutes, to both the
+terminal and the log:
+
+```
+--- [chunk 3/12] step 221,760 of 224,000 (72%) | 28m since checkpoint-216000 | ~17m to checkpoint-224000
+```
+
+It answers "can I kill this now, or is a checkpoint about to land?" without doing arithmetic on the
+trainer's ~15-minute step lines. The rate is measured from the chunk's own progress, so the ETA
+self-corrects rather than trusting a hardcoded steps-per-second. Set `PROGRESS_EVERY=0` to silence
+it, or to any number of seconds to change the cadence. It only reads the log.
+
 Runs in the **foreground** — deliberately not detached, so an arm lives only as long as its terminal
 and leaves no orphaned process. Interrupted runs resume from the last checkpoint.
 

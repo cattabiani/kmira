@@ -184,6 +184,14 @@ any of these costs real time or a real bug, so they live here rather than only i
 - **`/tmp` is tmpfs (RAM-backed), and this machine has only ~512MB of swap.** A memory spike (e.g.
   writing a multi-GB checkpoint there) hard-locks the machine instead of degrading gracefully.
   Never write checkpoints or large scratch files under `/tmp`.
+- **A backgrounded `sleep` loop does not die when you kill it.** The progress ticker
+  (`progress_watcher.sh`) blocked in `sleep 600`, so the launcher's `kill` sat unhandled until the
+  sleep returned -- up to ten minutes of a ticker outliving its chunk and reporting on a stopped
+  run. Background the sleep and `wait` on it, so the trap fires on arrival, and have the trap kill
+  the sleep too. Then `wait` on the watcher in the launcher to reap it.
+- **`pkill -f <pattern>` can match your own shell.** `pkill -f progress_watcher` matched the very
+  command line containing it and killed the session's shell mid-command, so the edit it was paired
+  with never ran. Match on something narrower, or list with `ps`/`pgrep` and kill by PID.
 - **A launcher pinned to one run silently extends the wrong one.** `run_anneal.sh` hardcoded
   `NAME=plateau_baseline` and seed base 28 -- the retired run -- so annealing any other arm would
   have continued the retired one instead. It now takes the same arm argument as `run_plateau.sh`.

@@ -180,6 +180,13 @@ echo "   checkpoints   : one per chunk, KEPT (~1.6GiB each after pruning resume-
 echo "   started       : $(date '+%H:%M:%S')"
 echo "=================================================================="
 
+# How often the background ticker reports progress within a chunk. Set PROGRESS_EVERY=0 to silence
+# it. It only reads the log, so it cannot affect training.
+PROGRESS_EVERY="${PROGRESS_EVERY:-600}"
+WATCHER_PID=""
+# Kill the ticker on any exit, including Ctrl-C, so it never outlives the run it is reporting on.
+trap 'if [ -n "${WATCHER_PID:-}" ]; then kill "$WATCHER_PID" 2>/dev/null || true; fi' EXIT
+
 CHUNK_N=0
 N_CHUNKS="$ANNEAL_HOURS"
 while [ "$(current_step)" -lt "$TOTAL" ]; do
@@ -196,6 +203,16 @@ while [ "$(current_step)" -lt "$TOTAL" ]; do
   # The same per-chunk seed schedule the plateau run used, continued unbroken: seeds are keyed to
   # the absolute step, so the anneal picks up the next slices rather than replaying earlier ones.
   SEED=$((SEED_BASE + NEXT / CHUNK))
+
+  # Background progress ticker: prints time-since-last-checkpoint and an ETA to the next one every
+  # PROGRESS_EVERY seconds, so "can I kill this now?" is answerable without doing arithmetic on the
+  # trainer's ~15-minute step lines. Purely a reader of the log; killed when the chunk ends, and via
+  # the EXIT trap if the script is interrupted, so no ticker can outlive its run.
+  if [ "$PROGRESS_EVERY" -gt 0 ]; then
+    bash "$PWD/codec/scripts/progress_watcher.sh" \
+      "$LOG" "$DONE" "$NEXT" "$CHUNK_N" "$N_CHUNKS" "$PROGRESS_EVERY" &
+    WATCHER_PID=$!
+  fi
 
   TRAIN_OK=0
   for attempt in 1 2 3 4 5; do
@@ -230,6 +247,12 @@ while [ "$(current_step)" -lt "$TOTAL" ]; do
       sleep "$wait"
     fi
   done
+  if [ -n "${WATCHER_PID:-}" ]; then
+    kill "$WATCHER_PID" 2>/dev/null || true
+    wait "$WATCHER_PID" 2>/dev/null || true   # reap it, so no zombie ticker per chunk
+    WATCHER_PID=""
+  fi
+
   if [ "$TRAIN_OK" -ne 1 ]; then
     echo "ABORT: anneal chunk failed 5 times in a row." >&2
     exit 1

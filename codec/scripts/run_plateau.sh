@@ -246,6 +246,13 @@ if [ "$FREE_GB" -lt "$NEED_GB" ]; then
   exit 1
 fi
 
+# How often the background ticker reports progress within a chunk. Set PROGRESS_EVERY=0 to silence
+# it. It only reads the log, so it cannot affect training.
+PROGRESS_EVERY="${PROGRESS_EVERY:-600}"
+WATCHER_PID=""
+# Kill the ticker on any exit, including Ctrl-C, so it never outlives the run it is reporting on.
+trap 'if [ -n "${WATCHER_PID:-}" ]; then kill "$WATCHER_PID" 2>/dev/null || true; fi' EXIT
+
 CHUNK_N=0
 while [ "$(current_step)" -lt "$TOTAL" ]; do
   DONE="$(current_step)"
@@ -321,6 +328,16 @@ while [ "$(current_step)" -lt "$TOTAL" ]; do
   # 5 attempts / 10-20-40-80s backoff, not the original 3x15s: that budget (~45s of coverage) proved
   # too thin for a real flaky patch, which is what actually happened -- three straight failures with
   # network confirmed fine moments after the script gave up.
+  # Background progress ticker: prints time-since-last-checkpoint and an ETA to the next one every
+  # PROGRESS_EVERY seconds, so "can I kill this now?" is answerable without doing arithmetic on the
+  # trainer's ~15-minute step lines. Purely a reader of the log; killed when the chunk ends, and via
+  # the EXIT trap if the script is interrupted, so no ticker can outlive its run.
+  if [ "$PROGRESS_EVERY" -gt 0 ]; then
+    bash "$PWD/codec/scripts/progress_watcher.sh" \
+      "$LOG" "$DONE" "$NEXT" "$CHUNK_N" "$N_CHUNKS" "$PROGRESS_EVERY" &
+    WATCHER_PID=$!
+  fi
+
   TRAIN_OK=0
   for attempt in 1 2 3 4 5; do
     if "$PIXI" run python "$HUB_SCRIPT" \
@@ -353,6 +370,12 @@ while [ "$(current_step)" -lt "$TOTAL" ]; do
       sleep "$wait"
     fi
   done
+  if [ -n "${WATCHER_PID:-}" ]; then
+    kill "$WATCHER_PID" 2>/dev/null || true
+    wait "$WATCHER_PID" 2>/dev/null || true   # reap it, so no zombie ticker per chunk
+    WATCHER_PID=""
+  fi
+
   if [ "$TRAIN_OK" -ne 1 ]; then
     echo "ABORT: training chunk failed 5 times in a row -- this is more than the known flake, stopping." >&2
     exit 1
