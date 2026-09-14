@@ -80,7 +80,7 @@ sits beside the checkpoints.
 `abl_baseline-*`), cold-started with a per-chunk seed from step 0 and therefore 100% coverage.
 Still training. Its live trajectory is the one figure in `../postprocessing/RESULTS.md`.
 
-**Queued**, in order: finish `baseline_v2` to its elbow and anneal; then `abl_frozen` (the
+**Queued**, in order: anneal `baseline_v2` at its step budget; then `abl_frozen` (the
 frozen-bottleneck ablation, sharing seed base 1028 so it is paired with `baseline_v2` on both
 initialisation and data) and `baseline_v2_s2` (seed base 2028, the run-to-run spread); then
 Experiments 1 and 2 redone. Costs and scope cuts are in `../AGENTS.md`; the design is pre-registered

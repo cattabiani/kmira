@@ -9,7 +9,7 @@ Six panels, two questions.
 WHERE IS THE ELBOW? The scored PSNR curve and, beside it, the per-chunk increment. The increment is
 the panel to read: this project has twice called an elbow off a flat-looking curve and been wrong,
 and both times the increment panel would have shown the flat stretch was still buying 0.1 dB a
-chunk. An elbow needs several trailing increments near zero, not one.
+chunk. Judged on the trailing trend against the between-reading spread, never on single chunks.
 
 WHERE ARE THE LOSSES CEILING OUT? mira's four validation terms, each in its own panel because their
 scales differ by three orders of magnitude (dino latent consistency runs ~1e-4 where lpips runs
@@ -129,7 +129,7 @@ def build():
     dy = [b - a for (_, a), (_, b) in itertools.pairwise([(s, v) for s, v in psnr])]
     ax.bar(dx, dy, width=6200, color=C)
     ax.axhline(0, color=INK_SOFT, linewidth=0.9)
-    ax.set_title("Δ PSNR per 8k chunk — read THIS for the elbow", loc="left")
+    ax.set_title("Δ PSNR per 8k chunk — read THIS, with the trend", loc="left")
     ax.set_ylabel("Δ dB per chunk")
     _trend, _sd, _ratio = trend_vs_spread(psnr)
     ax.annotate(
@@ -198,8 +198,21 @@ def build():
 
 
 def stats_for(psnr, readings, steps) -> str:
+    trend, sd, ratio = trend_vs_spread(psnr)
+    verdict = (
+        "still climbing -- the trend is well clear of the bounce"
+        if ratio >= 3
+        else "flat within the bounce"
+    )
     lines = [
         f"### baseline_v2 — WIP readout at step {max(steps):,}\n",
+        (
+            f"**Trend over the last 10 scored chunks: {trend:+.3f} dB per 10,000 steps**, against a "
+            f"residual spread of {sd:.3f} dB between readings — a ratio of {ratio:.0f}x, so "
+            f"{verdict}. The per-chunk increment alone cannot settle this: a chunk's gain carries "
+            f"the seed effect of the slice it drew, which spans +0.795 to -0.396 dB on a paired "
+            f"arm.\n"
+        ),
         (
             "The clean baseline: per-chunk seeds from step 0, 100% training-data coverage, constant "
             "LR 1e-4, no anneal yet. Still training, so every number here moves.\n"

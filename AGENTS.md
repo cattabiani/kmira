@@ -34,8 +34,8 @@ much smaller, single-GPU scale, using paired A/B comparisons against a locked ba
 
 **Scope the experiment to the resources, not the ambition.** Every reduction here — the Base
 decoder instead of XL, image-only instead of temporal, one dataset — exists so that what remains
-can be run *properly*: to its elbow, paired, and long enough that the gap is not a difference in
-training speed. A smaller experiment carried to completion answers a question; a bigger one stopped
+can be run *properly*: paired, at matched steps, and long enough that the gap is not a difference
+in training speed. A smaller experiment carried to completion answers a question; a bigger one stopped
 early answers none. When a proposal does not fit the GPU, cut the scope before cutting the
 protocol.
 
@@ -61,12 +61,14 @@ summarised in `postprocessing/RESULTS.md` section 5.
 
 ### The rebuild, in three phases
 
-Priced from the live run's measured 1.20 h per 8k chunk (cold) and 1.00 h (warm): **~154 h if
-`baseline_v2` elbows at 200,000, ~186 h at 272,000.** The elbow is unknown and may land *later*
-than the legacy 272,000 -- a run seeing 100% of the data has more to learn, not less. The increment
-panel decides it. Pre-registered in `experiments/2026-09-10-paired-recalibration/NOTES.md`.
+Priced from the live run's measured 1.20 h per 8k chunk (cold) and 1.00 h (warm): **~154 h for a
+200,000-step baseline, ~186 h at 272,000.** **There is no elbow to wait for.** Constant LR on this
+rig has never produced a detectable plateau -- flat stretches keep resuming, and at 264,000 the
+trend was still +0.019 dB/10k at 13x the between-reading spread. Treat the run length as a BUDGET
+fixed in advance, read every arm at matched steps, and say in the write-up that the run was still
+improving when stopped. Waiting for a convergence test to fire burns GPU indefinitely. Pre-registered in `experiments/2026-09-10-paired-recalibration/NOTES.md`.
 
-1. **A trustworthy baseline (~19 h).** Finish `baseline_v2` to its elbow, then anneal 32,000 steps.
+1. **A trustworthy baseline (~19 h).** Anneal `baseline_v2` 32,000 steps from its budgeted stop.
    Everything is blocked on this.
 2. **The calibration that never existed (~60 h).** `abl_frozen` (seed base 1028, so it is paired
    with `baseline_v2` chunk for chunk) and `baseline_v2_s2` (seed base 2028, the run-to-run

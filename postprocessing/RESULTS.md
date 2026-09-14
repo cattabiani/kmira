@@ -39,9 +39,9 @@ Two reductions matter for reading anything below.
 
 **The Base decoder.** XL does not fit in 12GB under fp32 Adam. Base is one of the three sizes mira
 themselves ablate, so it is a published operating point rather than an arbitrary shrink, and it is
-the only size cheap enough to train to its elbow here — which matters more than absolute quality,
-because a gap measured between two undertrained models tells you which trains faster, not which is
-better. Both are mira's own configs, so this is a config change and not a fork: training runs
+the only size cheap enough to train deep into diminishing returns here — which matters more than
+absolute quality, because a gap measured between two undertrained models tells you which trains
+faster, not which is better. Both are mira's own configs, so this is a config change and not a fork: training runs
 `mira/scripts/train_codec.py` unmodified.
 
 **Image-only.** `timesteps: 1`, no temporal stride. This is the single biggest reason no absolute
@@ -75,14 +75,17 @@ The protocol that follows from this: arms are **warm-started from one checkpoint
 **identical per-chunk seed schedule**, and read at **matched steps**. The unevenness then lands on
 both arms and cancels.
 
-**Calling an elbow needs a trend, not a reading.** Constant-LR training here has twice produced
-multi-hour flat stretches that resumed improving by over 1 dB, so the curve itself is not readable
-at this zoom. The per-chunk increment is plotted alongside every trajectory for that reason — but
-one increment is not enough either, because a chunk's gain carries the seed effect of the slice it
-drew, which ranges over **+0.795** to **-0.396 dB** on a paired arm. Any single near-zero reading,
-and any single jump, is inside that. The criterion is therefore the trailing trend divided by the
-reading-to-reading spread, reported on the increment panel: an elbow means the trend has fallen
-into the bounce, not that the last few readings looked small.
+**Runs are stopped on a step budget, not on a convergence test.** Constant-LR training here has
+never produced a detectable plateau: flat stretches lasting hours have repeatedly resumed improving,
+and the curve is still climbing where these runs are stopped. So a run length is a decision, not a
+measurement, and the only thing that keeps comparisons honest is that **every arm is read at matched
+steps** — which the paired protocol already guarantees.
+
+This is also why single readings are never quoted as evidence of anything. A chunk's gain carries
+the seed effect of the slice it drew, spanning **+0.795** to **-0.396 dB** on a paired arm, so any
+one near-zero reading, and any one jump, is inside the noise. Where a trajectory's progress is
+described, it is the trailing trend divided by the reading-to-reading spread, reported on the
+increment panel.
 
 ## 3. The reference baseline
 
@@ -94,7 +97,8 @@ It is **still training**, so the prose here stays qualitative and the numbers li
 
 What the six panels show:
 
-- **PSNR and its per-chunk increment.** The increment panel is the one to read for the elbow.
+- **PSNR and its per-chunk increment.** The increment panel carries the trend-versus-noise
+  readout, which is the one to read for whether the run is still improving.
 - **mira's four validation loss terms**, each on its own axis — they span three orders of
   magnitude, so a shared axis would flatten three of them into a line. Each panel reports its own
   trailing slope, because `loss_total` is dominated by `loss_lpips_perceptual` and hides the rest.
@@ -103,17 +107,18 @@ Two caveats that are properties of the instrumentation, not of the model:
 
 - **`loss_dino_latent_consistency` has reached mira's four-decimal logging resolution.** Its flat
   line is rounding, not convergence; nothing about that term's ceiling can be read from this log.
-- **The elbow is unknown and may land late.** This run has already produced a false one: its
-  increment fell to **+0.029 dB** at step 104,000 — flat enough that three more readings like it
-  would have been called an elbow — and the very next chunk returned **+0.199 dB**. That is the
-  third time on this rig that a near-zero increment has been followed by a jump, and it is why the
-  rule is *several* trailing readings rather than one.
+- **It has not converged, and is not claimed to have.** The trend over the last ten scored chunks
+  is **+0.019 dB per 10,000 steps** against a between-reading spread of **0.010 dB** — a ratio of
+  **13x**, so the curve is still climbing where it stands. Runs on this rig have repeatedly gone
+  flat for hours and then resumed, so this is reported as a budget, not as a ceiling: the reference
+  point is *trained to N steps under a fixed recipe*, and every arm compared against it is read at
+  the same steps.
 
 ## 4. Queued
 
 | study | what it establishes |
 |---|---|
-| baseline elbow + anneal | the fixed reference point every comparison is read against |
+| baseline anneal | the fixed reference point every comparison is read against |
 | frozen-bottleneck ablation | whether the benchmark resolves a known ~1.4 dB effect, paired |
 | second-seed baseline | the run-to-run spread at the operating point |
 | learned layer aggregation | Experiments 1 and 2 (see section 5) |

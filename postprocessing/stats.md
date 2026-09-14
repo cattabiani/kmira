@@ -135,6 +135,8 @@ At step 56,000 — the end of the superseded run's fixed-seed stretch — the de
 
 ### baseline_v2 — WIP readout at step 265,000
 
+**Trend over the last 10 scored chunks: +0.019 dB per 10,000 steps**, against a residual spread of 0.010 dB between readings — a ratio of 13x, so still climbing -- the trend is well clear of the bounce. The per-chunk increment alone cannot settle this: a chunk's gain carries the seed effect of the slice it drew, which spans +0.795 to -0.396 dB on a paired arm.
+
 The clean baseline: per-chunk seeds from step 0, 100% training-data coverage, constant LR 1e-4, no anneal yet. Still training, so every number here moves.
 
 | step | PSNR (dB) | Δ per 8k |
