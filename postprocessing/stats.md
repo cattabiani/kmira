@@ -67,28 +67,6 @@ Note `plateau_baseline` (RESULTS.md calls it *the baseline run*) reads as mixed 
 
 <!-- from make_all.py -->
 
-### The data slice moves the metric — measured on the baseline alone
-
-Each 8,000-step chunk draws a new seed, so a seed identifies a slice of the training stream. Averaging the baseline's validation loss by position within that period, over **146** readings from step 120,000 on (settled region only, so this is not the initial descent):
-
-| step offset in the seed period | | mean `loss_total` |
-|---|---|---|
-| 0 | **boundary — where PSNR is scored** | 0.2221 |
-| 1,000 | | 0.2217 |
-| 2,000 | | 0.2273 |
-| 3,000 | | 0.2265 |
-| 4,000 | | 0.2213 |
-| 5,000 | | 0.2170 |
-| 6,000 | | 0.2156 |
-| 7,000 | | 0.2162 |
-
-Peak-to-trough **0.0117**, or **5.4%** of the term. The same phase repeats in every chunk, so it is a property of the slice rather than a restart transient, which would decay. PSNR is always scored at offset 0, identically for every arm, so this biases no comparison — but it is why a single reading is not evidence, and why arms must be read at matched steps.
-
-
----
-
-<!-- from make_all.py -->
-
 ### Why comparisons here are paired
 
 Each 8,000-step chunk draws its stream from a per-chunk seed, so a seed identifies a slice of training data. The slices are not equivalent.
@@ -159,7 +137,7 @@ At step 56,000 — the end of the superseded run's fixed-seed stretch — the de
 
 ### baseline_v2 — WIP readout at step 265,000
 
-**Trend over the last 10 scored chunks: +0.019 dB per 10,000 steps**, against a residual spread of 0.010 dB between readings — a ratio of 13x, so still climbing -- the trend is well clear of the bounce. The per-chunk increment alone cannot settle this: a chunk's gain carries the seed effect of the slice it drew; see the slice-effect section above, measured on this run alone.
+**Trend over the last 10 scored chunks: +0.019 dB per 10,000 steps**, against a residual spread of 0.010 dB between readings — a ratio of 13x, so still climbing -- the trend is well clear of the bounce. The per-chunk increment alone cannot settle this: a chunk's gain carries the data it drew, which differs from chunk to chunk.
 
 The clean baseline: per-chunk seeds from step 0, 100% training-data coverage, constant LR 1e-4, no anneal yet. Still training, so every number here moves.
 

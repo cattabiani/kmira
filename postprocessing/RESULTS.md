@@ -59,32 +59,22 @@ a checkpoint, a validation reading and a scoring pass. A run is therefore a curv
 endpoint, and can be stopped and resumed on any chunk boundary because the learning rate is held
 constant.
 
-**Comparisons are paired, and this is not optional.** Each 8,000-step chunk draws its training
-stream from a per-chunk seed, so a seed identifies a slice of the data — and the slices are not
-equivalent. The baseline shows this on its own: averaging its validation loss by position within the
-seed period, over **146** readings from step 120,000 on, gives a peak-to-trough swing of **5.4%** of
-`loss_total`, with the same phase in every chunk. A restart transient would decay; this does not.
-The scoring point sits at a fixed offset in that cycle for every arm, so it biases no comparison —
-but it means a single reading is never evidence on its own.
-
-The protocol that follows, pre-registered in
-[`experiments/2026-09-10-paired-recalibration/NOTES.md`](../experiments/2026-09-10-paired-recalibration/NOTES.md):
-arms are **warm-started from one checkpoint**, run on an **identical per-chunk seed schedule**, and
-read at **matched steps**. The unevenness then lands on both arms and cancels.
-
+**The training recipe is locked.** Each 8,000-step chunk draws its data from a seed fixed by the
+absolute step, so the schedule is reproducible and every future arm can be run on the same one. That
+schedule, the constant LR of 1e-4, the 8,000-step chunking and the scoring protocol above are held
+fixed from here on, and arms are read at matched steps. Pre-registered in
+[`experiments/2026-09-10-paired-recalibration/NOTES.md`](../experiments/2026-09-10-paired-recalibration/NOTES.md).
 
 **Runs are stopped on a step budget, not on a convergence test.** Constant-LR training here has
 never produced a detectable plateau: flat stretches lasting hours have repeatedly resumed improving,
 and the curve is still climbing where these runs are stopped. So a run length is a decision, not a
 measurement, and the only thing that keeps comparisons honest is that **every arm is read at matched
-steps** — which the paired protocol already guarantees.
+steps** under the locked recipe.
 
-This is also why single readings are never quoted as evidence of anything. A chunk's gain carries
-the seed effect of the slice it drew — the same slice effect that shows up as a **5.4%** swing in
-the baseline's own validation loss — so any one near-zero reading, and any one jump, is inside the
-noise. Where a trajectory's progress is
-described, it is the trailing trend divided by the reading-to-reading spread, reported on the
-increment panel.
+This is also why single readings are never quoted as evidence of anything: consecutive chunks train
+on different data, so one chunk's gain bounces for reasons unrelated to the run. Where a
+trajectory's progress is described, it is the trailing trend divided by the reading-to-reading
+spread, reported on the increment panel.
 
 ## 3. The reference baseline
 

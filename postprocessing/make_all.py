@@ -183,46 +183,6 @@ def run_metadata_table() -> str:
     return "\n".join(lines)
 
 
-def slice_effect_from_baseline() -> str:
-    """Evidence that the data slice moves the metric, taken from the BASELINE ALONE.
-
-    The paired protocol used to be justified with per-chunk gains measured on the warm-start arms.
-    Those arms are being redone, so quoting them in the results would be presenting a conclusion
-    from an experiment that no longer stands. The same effect is visible without them: each 8,000-
-    step chunk draws a new seed, and the validation curve carries an oscillation locked to that
-    period, with the same phase in every chunk. A restart transient would decay; this does not.
-    """
-    import statistics
-
-    blob = json.loads((HERE / "data" / "run_metadata.json").read_text())["runs"]["ablation_baseline"]
-    by_step = {r["step"]: r["loss_total"] for r in blob["readings"]}
-    # Settled region only, so the shape is the slice and not the initial descent.
-    steps = sorted(s for s in by_step if s >= 120_000)
-    by_offset: dict[int, list[float]] = {}
-    for s in steps:
-        by_offset.setdefault(s % 8000, []).append(by_step[s])
-    means = {k: statistics.mean(v) for k, v in by_offset.items()}
-    lo, hi = min(means.values()), max(means.values())
-    rows = "\n".join(
-        f"| {k:,} |{' **boundary — where PSNR is scored**' if k == 0 else ''} | {means[k]:.4f} |"
-        for k in sorted(means)
-    )
-    return (
-        "### The data slice moves the metric — measured on the baseline alone\n\n"
-        "Each 8,000-step chunk draws a new seed, so a seed identifies a slice of the training "
-        "stream. Averaging the baseline's validation loss by position within that period, over "
-        f"**{len(steps)}** readings from step 120,000 on (settled region only, so this is not the "
-        "initial descent):\n\n"
-        "| step offset in the seed period | | mean `loss_total` |\n|---|---|---|\n"
-        f"{rows}\n\n"
-        f"Peak-to-trough **{hi - lo:.4f}**, or **{100 * (hi - lo) / lo:.1f}%** of the term. The same "
-        "phase repeats in every chunk, so it is a property of the slice rather than a restart "
-        "transient, which would decay. PSNR is always scored at offset 0, identically for every "
-        "arm, so this biases no comparison — but it is why a single reading is not evidence, and "
-        "why arms must be read at matched steps.\n"
-    )
-
-
 def protocol_evidence() -> str:
     """The two quantitative claims RESULTS.md section 2 makes about the protocol.
 
@@ -332,7 +292,6 @@ def main() -> None:
     sections: list[str] = [
         f"<!-- from make_all.py -->\n\n{setup_table()}",
         f"<!-- from make_all.py -->\n\n{run_metadata_table()}",
-        f"<!-- from make_all.py -->\n\n{slice_effect_from_baseline()}",
         f"<!-- from make_all.py -->\n\n{protocol_evidence()}",
         f"<!-- from make_all.py -->\n\n{superseded_baseline()}",
     ]

@@ -211,8 +211,7 @@ def stats_for(psnr, readings, steps) -> str:
             f"**Trend over the last 10 scored chunks: {trend:+.3f} dB per 10,000 steps**, against a "
             f"residual spread of {sd:.3f} dB between readings — a ratio of {ratio:.0f}x, so "
             f"{verdict}. The per-chunk increment alone cannot settle this: a chunk's gain carries "
-            f"the seed effect of the slice it drew; see the slice-effect section above, measured "
-            f"on this run alone.\n"
+            f"the data it drew, which differs from chunk to chunk.\n"
         ),
         (
             "The clean baseline: per-chunk seeds from step 0, 100% training-data coverage, constant "
