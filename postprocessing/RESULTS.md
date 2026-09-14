@@ -59,22 +59,13 @@ a checkpoint, a validation reading and a scoring pass. A run is therefore a curv
 endpoint, and can be stopped and resumed on any chunk boundary because the learning rate is held
 constant.
 
-**The training recipe is locked.** Each 8,000-step chunk draws its data from a seed fixed by the
-absolute step, so the schedule is reproducible and every future arm can be run on the same one. That
-schedule, the constant LR of 1e-4, the 8,000-step chunking and the scoring protocol above are held
-fixed from here on, and arms are read at matched steps. Pre-registered in
+**The recipe is locked** — constant LR 1e-4, 8,000-step chunks, and a data seed fixed by the
+absolute step. Every arm runs it and is read at matched steps. Pre-registered in
 [`experiments/2026-09-10-paired-recalibration/NOTES.md`](../experiments/2026-09-10-paired-recalibration/NOTES.md).
 
-**Runs are stopped on a step budget, not on a convergence test.** Constant-LR training here has
-never produced a detectable plateau: flat stretches lasting hours have repeatedly resumed improving,
-and the curve is still climbing where these runs are stopped. So a run length is a decision, not a
-measurement, and the only thing that keeps comparisons honest is that **every arm is read at matched
-steps** under the locked recipe.
-
-This is also why single readings are never quoted as evidence of anything: consecutive chunks train
-on different data, so one chunk's gain bounces for reasons unrelated to the run. Where a
-trajectory's progress is described, it is the trailing trend divided by the reading-to-reading
-spread, reported on the increment panel.
+**Runs stop on a step budget.** Constant LR here has never produced a detectable plateau, so the
+length is a decision rather than a measurement. Consecutive chunks train on different data, so
+progress is read as a trailing trend, never off a single chunk.
 
 ## 3. The reference baseline
 
