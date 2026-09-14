@@ -59,26 +59,6 @@ a checkpoint, a validation reading and a scoring pass. A run is therefore a curv
 endpoint, and can be stopped and resumed on any chunk boundary because the learning rate is held
 constant.
 
-**Frames are drawn uniformly over clips, which weights matches by their scoreline.** A sample is a
-within-chunk clip, and every clip of every match is enumerated with no per-match cap, so a match
-contributes samples in proportion to its duration — the longest supplies **2.1×** the frames of the
-shortest. What duration stands for is the part worth stating. A Rocket League match has a fixed
-five-minute game clock, so it is mostly a count of goals: each one adds a replay, a celebration and
-a kickoff, and a tie adds overtime. Across **179** matches, duration correlates with goals scored at
-**r = 0.786**. The longest quartile averages **8.8** goals against **3.7** in the shortest, while
-live play differs far less than the clock does — **7.0** against **5.6** minutes once replays are
-removed.
-
-So the stream is not weighted toward *more play*; it is weighted toward *high-scoring play*, and
-toward the footage that surrounds a goal. **13.9%** of training frames are goal-replay footage,
-which is a visually distinct regime — cinematic cameras and cuts rather than the player's view.
-Training includes it; mira's trainer forces `exclude_replays=True` for validation, and the scorer
-does the same, so **replay footage is trained on but never validated or scored**.
-
-None of this is corrected for, and on this corpus it stays mild: the ten longest matches hold
-**7.3%** of all frames while being 5.6% of matches, so no match dominates. It is recorded because a
-corpus with a heavier tail, or any claim read per match rather than per frame, would need it.
-
 **Comparisons are paired, and this is not optional.** Each 8,000-step chunk draws its training
 stream from a per-chunk seed, so a seed identifies a slice of the data — and the slices are not
 equivalent. The baseline shows this on its own: averaging its validation loss by position within the

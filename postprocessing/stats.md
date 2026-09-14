@@ -27,15 +27,7 @@ file's prose appears here. Sources: `codec/results/benchmark.jsonl` (written by
 | compression | 442,368 → 4,608 values per frame = **96×**, spatial only |
 | optimiser | AdamW lr 0.0001, betas [0.9, 0.95], weight decay 0.1 |
 
-**How frames are drawn.** One sample is a within-chunk clip, and mira's `_plan_match` enumerates every clip of every match with no per-match cap, so the stream is uniform over clips and therefore **proportional to match duration**. What that weights by is not obvious, and is measured rather than assumed: a Rocket League match has a fixed 5-minute game clock, so duration is mostly a count of goals -- each one adds a replay, a celebration and a kickoff, and a tie adds overtime.
-
-- 179 matches, 5.3-11.0 minutes, 1-12 goals (median 6).
-- Duration correlates with goals at **r = 0.786**.
-- Shortest quartile: 6.2 min, 3.7 goals, 9.6% replay frames. Longest quartile: 8.5 min, 8.8 goals, 17.1% replay frames.
-- Net of replays, live play differs far less than duration does: 5.6 vs 7.0 minutes.
-- **13.9%** of training frames are goal-replay footage, because `exclude_replays` is false for training. mira's trainer hardcodes it TRUE for validation, and `eval_codec` sets it TRUE for scoring, so replay footage is trained on but never validated or scored.
-
-So duration-proportional sampling over-weights high-scoring matches, and the longest match contributes **2.1x** the frames of the shortest. The ten longest hold 7.3% of all frames while being 5.6% of matches, so no single match dominates.
+**How frames are drawn.** One sample is a within-chunk clip at the target frame rate; `_plan_match` enumerates every clip of every match, with no per-match cap and no reweighting. The training index holds 179 matches.
 
 **Scoring**, as recorded in every row of `benchmark.jsonl`: 2,048 held-out frames at a fixed evaluation seed 37, reporting psnr, ssim, lpips, p_dino, r_fdd.
 
