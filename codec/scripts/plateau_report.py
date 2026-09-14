@@ -49,16 +49,25 @@ def read_val_curve(log_path: Path) -> list[tuple[int, float]]:
     return sorted(by_step.items())
 
 
-def read_scored() -> dict[int, dict]:
+def read_scored(log_path: Path) -> dict[int, dict]:
+    """Scored rows for THIS run only, selected by the run directory in each row's checkpoint path.
+
+    Selecting on the `tag` prefix instead would be wrong: tags are chosen per arm and one of them
+    (`abl_baseline`) deliberately no longer matches its own run directory, so a prefix test silently
+    pairs one run's validation curve with another run's dB. The checkpoint path is the only field
+    that cannot drift from the run that wrote it.
+    """
     if not RESULTS.exists():
         return {}
+    run = log_path.stem  # checkpoints/calibration/<run>.log <-> checkpoints/calibration/<run>/
     scored = {}
     for line in RESULTS.read_text().splitlines():
         if not line.strip():
             continue
         row = json.loads(line)
-        if row["tag"].startswith("plateau-"):
-            scored[int(row["tag"].removeprefix("plateau-"))] = row
+        m = re.search(rf"/{re.escape(run)}/checkpoint-(\d+)/", row.get("checkpoint", ""))
+        if m:
+            scored[int(m.group(1))] = row
     return scored
 
 
@@ -67,7 +76,7 @@ def main() -> None:
     val = read_val_curve(log_path)
     if not val:
         sys.exit(f"no validation readings found in {log_path}")
-    scored = read_scored()
+    scored = read_scored(log_path)
 
     csv = ["step,val_loss,psnr,ssim,lpips,p_dino,r_fdd"]
     print(f"{'step':>8}{'val_loss':>10}{'delta':>9}{'PSNR':>8}{'dPSNR':>8}{'LPIPS':>8}")
