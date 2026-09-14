@@ -184,6 +184,24 @@ any of these costs real time or a real bug, so they live here rather than only i
 - **`/tmp` is tmpfs (RAM-backed), and this machine has only ~512MB of swap.** A memory spike (e.g.
   writing a multi-GB checkpoint there) hard-locks the machine instead of degrading gracefully.
   Never write checkpoints or large scratch files under `/tmp`.
+- **A launcher pinned to one run silently extends the wrong one.** `run_anneal.sh` hardcoded
+  `NAME=plateau_baseline` and seed base 28 -- the retired run -- so annealing any other arm would
+  have continued the retired one instead. It now takes the same arm argument as `run_plateau.sh`.
+  Whenever you add an arm to one launcher, add it to the other. The same class of bug hit
+  `plateau_report.py`, which selected scored rows by a hardcoded `plateau-` tag prefix and so
+  printed the retired run's dB beside a live run's validation curve: **select rows by the run
+  directory in the checkpoint path, never by a tag prefix** -- tags are chosen per arm and
+  `abl_baseline`'s deliberately no longer matches its own directory.
+- **An anneal's decay window must survive a relaunch.** `constant_steps` and `decay_steps` jointly
+  define where the decay starts, so recomputing them from the current step on each launch pushes the
+  start later every time and the LR never comes down. The window is fixed at first launch and
+  persisted to `<run>/anneal_window.env`. Holding it constant only within one invocation is not
+  enough -- these runs take hours and do get interrupted.
+- **Regenerating figures needs the extractors re-run first.** `make_all.py` reads `benchmark.jsonl`
+  live but takes validation readings from `postprocessing/data/run_metadata.json`, which only
+  `extract_run_metadata.py` writes. Skipping it once produced a figure whose loss panel was 68,000
+  steps behind its own PSNR panel, with trailing slopes that came out positive as a result. Run
+  `extract_run_metadata.py` before `make_all.py` after any training.
 - **Annealing a converged constant-LR run to a low LR buys real dB, and a warm start gives it
   straight back.** A warm start (`finetune_from`) resets the optimizer and raises the LR again, so
   it drops below the annealed number and spends tens of thousands of steps recovering. **Read a

@@ -123,8 +123,15 @@ so they are directly comparable. Slots accumulate: re-run with more hours to ext
 bash codec/scripts/run_plateau.sh 8                  # baseline_v2, the reference baseline
 bash codec/scripts/run_plateau.sh 8 abl_frozen       # frozen-bottleneck ablation, paired with it
 bash codec/scripts/run_plateau.sh 8 baseline_v2_s2   # second seed, for the run-to-run spread
-bash codec/scripts/run_anneal.sh                     # cosine-decay from wherever a run stopped
+bash codec/scripts/run_anneal.sh 4                    # cosine-decay baseline_v2 from where it stopped
+bash codec/scripts/run_anneal.sh 4 abl_frozen        # anneal a different arm
 ```
+
+`run_anneal.sh` takes the same arm names as `run_plateau.sh`. It fixes the decay window at its
+first launch and records it in `<run>/anneal_window.env`, so an interrupted anneal resumes on the
+same schedule instead of re-basing the decay onto the newer checkpoint and never coming down. A
+relaunch with a different number of hours is refused; delete that file to abandon the anneal and
+start a fresh one from the current step.
 
 Runs in the **foreground** — deliberately not detached, so an arm lives only as long as its terminal
 and leaves no orphaned process. Interrupted runs resume from the last checkpoint.
