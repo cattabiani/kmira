@@ -53,6 +53,33 @@ TERMS = [
 ]
 
 
+def trend_vs_spread(psnr, n=10):
+    """Trailing trend in the PSNR curve, and how it compares to the reading-to-reading spread.
+
+    THE PER-CHUNK INCREMENT IS THE WRONG ESTIMATOR NEAR THE ELBOW. A single chunk's gain carries the
+    seed effect of the slice it drew, measured on a paired arm at up to +0.795/-0.396 dB, so any one
+    near-zero reading -- or any one jump -- is inside the noise. Three consecutive near-zero chunks
+    were called an elbow at step 224,000 on exactly this run, and the next readings moved again.
+    Fitting a line through the last n chunks and dividing by the residual spread asks the question
+    the eye cannot: is the curve still going somewhere, relative to how much it bounces?
+    """
+    pts = psnr[-n:]
+    if len(pts) < 3:
+        return 0.0, 0.0, 0.0
+    xs = [s for s, _ in pts]
+    ys = [v for _, v in pts]
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    den = sum((x - mx) ** 2 for x in xs)
+    if den == 0:
+        return 0.0, 0.0, 0.0
+    b = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)) / den
+    a = my - b * mx
+    resid = [y - (a + b * x) for x, y in zip(xs, ys, strict=True)]
+    sd = (sum(r * r for r in resid) / len(resid)) ** 0.5
+    total = b * (xs[-1] - xs[0])
+    return b * 10_000, sd, (abs(total) / sd if sd else float("inf"))
+
+
 def trailing_rate(xs, ys, n=8):
     """Least-squares slope over the last n readings, per 10,000 steps.
 
@@ -104,9 +131,14 @@ def build():
     ax.axhline(0, color=INK_SOFT, linewidth=0.9)
     ax.set_title("Δ PSNR per 8k chunk — read THIS for the elbow", loc="left")
     ax.set_ylabel("Δ dB per chunk")
+    _trend, _sd, _ratio = trend_vs_spread(psnr)
     ax.annotate(
         f"last 3: {', '.join(f'{d:+.3f}' for d in dy[-3:])}\n"
-        "an elbow needs several near zero,\nnot one",
+        "one chunk is inside the seed noise\n"
+        f"(paired arm: +0.795 / -0.396 dB)\n\n"
+        f"trend over last 10 chunks:\n"
+        f"{_trend:+.3f} dB/10k, {_ratio:.0f}x the bounce\n"
+        f"{'STILL CLIMBING' if _ratio >= 3 else 'FLAT within noise'}",
         xy=(0.97, 0.95),
         xycoords="axes fraction",
         ha="right",

@@ -75,10 +75,14 @@ The protocol that follows from this: arms are **warm-started from one checkpoint
 **identical per-chunk seed schedule**, and read at **matched steps**. The unevenness then lands on
 both arms and cancels.
 
-**Calling an elbow needs the increment, not the curve.** Constant-LR training here has twice
-produced multi-hour flat stretches that resumed improving by over 1 dB. The per-chunk increment is
-plotted alongside every trajectory for this reason, and an elbow requires several trailing
-increments near zero.
+**Calling an elbow needs a trend, not a reading.** Constant-LR training here has twice produced
+multi-hour flat stretches that resumed improving by over 1 dB, so the curve itself is not readable
+at this zoom. The per-chunk increment is plotted alongside every trajectory for that reason — but
+one increment is not enough either, because a chunk's gain carries the seed effect of the slice it
+drew, which ranges over **+0.795** to **-0.396 dB** on a paired arm. Any single near-zero reading,
+and any single jump, is inside that. The criterion is therefore the trailing trend divided by the
+reading-to-reading spread, reported on the increment panel: an elbow means the trend has fallen
+into the bounce, not that the last few readings looked small.
 
 ## 3. The reference baseline
 

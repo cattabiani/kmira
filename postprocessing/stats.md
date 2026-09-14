@@ -47,7 +47,7 @@ Captured by `extract_run_metadata.py`. `benchmark.jsonl` holds the scored PSNR r
 | `A_baseline` | 20 | 1 | 1 | 28–28 (1) | cosine |
 | `B_frozen_bneck` | 20 | 1 | 1 | 28–28 (1) | cosine |
 | `C_baseline_seed2` | 20 | 1 | 1 | 1234–1234 (1) | cosine |
-| `ablation_baseline` | 225 | 28 | 37 | 1029–1057 (29) | constant |
+| `ablation_baseline` | 266 | 33 | 45 | 1029–1062 (34) | constant |
 | `plateau_baseline` | 305 | 34 | 44 | 28–66 (32) | mixed (40 constant, 4 cosine) |
 | `warmstart_control` | 201 | 25 | 29 | 28–52 (25) | constant |
 | `warmstart_learn7` | 97 | 12 | 12 | 28–39 (12) | constant |
@@ -120,6 +120,11 @@ Section 5 disclaims the archived studies' magnitudes because the baseline they w
 | 208,000 | 24.5070 | 24.5354 | **+0.028** |
 | 216,000 | 24.4644 | 24.5512 | **+0.087** |
 | 224,000 | 24.4890 | 24.5640 | **+0.075** |
+| 232,000 | 24.5310 | 24.5729 | **+0.042** |
+| 240,000 | 24.5845 | 24.5928 | **+0.008** |
+| 248,000 | 24.6423 | 24.6076 | **-0.035** |
+| 256,000 | 24.6892 | 24.6085 | **-0.081** |
+| 264,000 | 24.7362 | 24.6624 | **-0.074** |
 
 At step 56,000 — the end of the superseded run's fixed-seed stretch — the deficit is **+1.868 dB**, peaking at **+2.065 dB** at 88,000. Coverage measured separately with `codec/scripts/measure_data_coverage.py`.
 
@@ -128,7 +133,7 @@ At step 56,000 — the end of the superseded run's fixed-seed stretch — the de
 
 <!-- from plot_baseline_v2.py -->
 
-### baseline_v2 — WIP readout at step 224,000
+### baseline_v2 — WIP readout at step 265,000
 
 The clean baseline: per-chunk seeds from step 0, 100% training-data coverage, constant LR 1e-4, no anneal yet. Still training, so every number here moves.
 
@@ -162,14 +167,19 @@ The clean baseline: per-chunk seeds from step 0, 100% training-data coverage, co
 | 208,000 | 24.5354 | +0.003 |
 | 216,000 | 24.5512 | +0.016 |
 | 224,000 | 24.5640 | +0.013 |
+| 232,000 | 24.5729 | +0.009 |
+| 240,000 | 24.5928 | +0.020 |
+| 248,000 | 24.6076 | +0.015 |
+| 256,000 | 24.6085 | +0.001 |
+| 264,000 | 24.6624 | +0.054 |
 
 Validation loss terms, trailing slope over the last 8 readings:
 
 | term | latest | trailing slope per 10k steps |
 |---|---|---|
-| `loss_total` | 0.2179 | -0.0101 |
-| `loss_mae` | 0.0573 | -0.0031 |
-| `loss_lpips_perceptual` | 0.1605 | -0.00694 |
+| `loss_total` | 0.2131 | -0.0128 |
+| `loss_mae` | 0.056 | -0.00321 |
+| `loss_lpips_perceptual` | 0.1571 | -0.00951 |
 | `loss_dino_latent_consistency` | 0.0001 | — at the log's 4-dp floor |
 
 A term whose trailing slope is small relative to its own value has stopped moving; read each separately, because `loss_total` is dominated by `loss_lpips_perceptual` and hides the other two.
