@@ -8,11 +8,10 @@ benchmark for changes to the codec design.
 
 **Status.** The benchmark and its training protocol are built and characterised. The reference
 baseline is training now; section 3 is its live trajectory. Comparative studies are queued
-(section 4). Earlier results exist but rest on a superseded baseline — see section 5.
+(section 4).
 
 **Every figure and number here is generated from the run record, not written.** The numbers are
-quoted from [`stats.md`](stats.md); if the two disagree, `stats.md` is right. The exception is
-section 5, which describes superseded work and cites its own notes.
+quoted from [`stats.md`](stats.md); if the two disagree, `stats.md` is right.
 
 ```bash
 pixi run python postprocessing/make_all.py
@@ -94,41 +93,13 @@ Two caveats that are properties of the instrumentation, not of the model:
   point is *trained to N steps under a fixed recipe*, and every arm compared against it is read at
   the same steps.
 
-## 4. Queued
+## 4. In progress
 
-| study | what it establishes |
-|---|---|
-| baseline anneal | the fixed reference point every comparison is read against |
-| frozen-bottleneck ablation | whether the benchmark resolves a known ~1.4 dB effect, paired |
-| second-seed baseline | the run-to-run spread at the operating point |
-| learned layer aggregation | Experiments 1 and 2 (see section 5) |
+The rest of this page is being rewritten. Queued: the baseline's anneal, a frozen-bottleneck
+ablation, a second-seed baseline, and the learned layer-aggregation studies — all under the locked
+recipe above. Earlier studies that ran against a superseded baseline are archived at
+[`archive/RESULTS-legacy-baseline.md`](archive/RESULTS-legacy-baseline.md); their magnitudes do not
+carry over and nothing here depends on them.
 
-Until the middle two land, this benchmark has **no demonstration that it can resolve an effect of
-the size it is asked to judge**, and that limitation is load-bearing for everything else.
-
-## 5. Superseded results
-
-An earlier set of studies, on a previous baseline, is archived at
-[`archive/RESULTS-legacy-baseline.md`](archive/RESULTS-legacy-baseline.md). They found that
-replacing mira's fixed 7-layer aggregation with 24 learned per-layer weights improves
-reconstruction substantially against its paired control; that the gain comes mostly from gaining
-access to shallower DINOv3 blocks rather than from the weights being free; that each variant puts
-its mass on the shallowest block it is permitted to read; and that P-DINO does not separate the
-arms at all.
-
-Those comparisons were paired, so their **directions stand**. Their **magnitudes do not**: the
-baseline they were measured against had, for its first 56,000 steps, trained on roughly half the
-available data because of a data-loader seeding fault. Measured against the clean baseline at
-matched steps, it was **1.868 dB** behind by the end of that stretch. Coverage is reproducible with
-`codec/scripts/measure_data_coverage.py`, which replays the loader's own shard selection; the
-study's own numbers and reasoning are in
-[`../experiments/2026-09-10-paired-recalibration/NOTES.md`](../experiments/2026-09-10-paired-recalibration/NOTES.md).
-The studies are being redone on the baseline in section 3.
-
-## 6. Not comparable with the paper
-
-Every absolute value here is within-setup only. This rig is image-only, reduced-scale, and trained
-on one consumer GPU for hours rather than a cluster for days. Published numbers appear in this
-repository only as *relative* gaps between two of mira's own rows, transcribed with provenance in
-[`data/mira_layer_ablation.json`](data/mira_layer_ablation.json) and
-[`data/mira_bottleneck_ablation.json`](data/mira_bottleneck_ablation.json).
+Until the ablation and the second seed land, this benchmark has **no demonstration that it can
+resolve an effect of the size it is asked to judge**.
