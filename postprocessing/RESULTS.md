@@ -59,33 +59,39 @@ a checkpoint, a validation reading and a scoring pass. A run is therefore a curv
 endpoint, and can be stopped and resumed on any chunk boundary because the learning rate is held
 constant.
 
-**Frames are drawn uniformly over clips, so long matches count for more.** A sample is a
-within-chunk clip, and every clip of every match is enumerated with no per-match cap. Nothing
-equalises the matches: a match contributes samples in proportion to its duration, so an 11-minute
-match supplies roughly twice as many as a 5-minute one. That is a deliberate property worth stating
-rather than a defect — it makes the stream uniform over *frames of play*, which is what the codec is
-asked to reconstruct — but it does mean per-match statistics are duration-weighted.
+**Frames are drawn uniformly over clips, which weights matches by their scoreline.** A sample is a
+within-chunk clip, and every clip of every match is enumerated with no per-match cap, so a match
+contributes samples in proportion to its duration — the longest supplies **2.1×** the frames of the
+shortest. What duration stands for is the part worth stating. A Rocket League match has a fixed
+five-minute game clock, so it is mostly a count of goals: each one adds a replay, a celebration and
+a kickoff, and a tie adds overtime. Across **179** matches, duration correlates with goals scored at
+**r = 0.786**. The longest quartile averages **8.8** goals against **3.7** in the shortest, while
+live play differs far less than the clock does — **7.0** against **5.6** minutes once replays are
+removed.
 
-What keeps it from mattering here is that the matches are close in length: **179** matches of
-**5.3–11.0** minutes, the longest **2.1×** the shortest, with the ten longest holding **7.3%** of
-all frames while being 5.6% of matches. No match dominates the stream, so no reweighting is applied.
-On a corpus with a heavier tail this would need revisiting before any per-match claim.
+So the stream is not weighted toward *more play*; it is weighted toward *high-scoring play*, and
+toward the footage that surrounds a goal. **13.9%** of training frames are goal-replay footage,
+which is a visually distinct regime — cinematic cameras and cuts rather than the player's view.
+Training includes it; mira's trainer forces `exclude_replays=True` for validation, and the scorer
+does the same, so **replay footage is trained on but never validated or scored**.
 
-**Comparisons are paired, and this is not optional.** Each chunk draws its training stream from a
-per-chunk seed, so a seed identifies a slice of training data — and the slices are far from
-equivalent. Measured over 21 chunks of a paired arm, where a chunk's gain cannot be the
-intervention, the best slice is worth **+0.795 dB** in a single chunk while the worst three cost
-**0.177, 0.302 and 0.396 dB**. The ranking is a property of the slice: the same seeds come out best and worst in
-runs that met them at completely different points in training.
+None of this is corrected for, and on this corpus it stays mild: the ten longest matches hold
+**7.3%** of all frames while being 5.6% of matches, so no match dominates. It is recorded because a
+corpus with a heavier tail, or any claim read per match rather than per frame, would need it.
 
-An unpaired comparison at this scale therefore measures the data draw as much as the intervention.
-An early three-run study confirmed this the expensive way, resolving a published ~1.4 dB
-bottleneck effect at only **1.27×** the run-to-run spread — against the 3× its own criterion
-demanded.
+**Comparisons are paired, and this is not optional.** Each 8,000-step chunk draws its training
+stream from a per-chunk seed, so a seed identifies a slice of the data — and the slices are not
+equivalent. The baseline shows this on its own: averaging its validation loss by position within the
+seed period, over **146** readings from step 120,000 on, gives a peak-to-trough swing of **5.4%** of
+`loss_total`, with the same phase in every chunk. A restart transient would decay; this does not.
+The scoring point sits at a fixed offset in that cycle for every arm, so it biases no comparison —
+but it means a single reading is never evidence on its own.
 
-The protocol that follows from this: arms are **warm-started from one checkpoint**, run on an
-**identical per-chunk seed schedule**, and read at **matched steps**. The unevenness then lands on
-both arms and cancels.
+The protocol that follows, pre-registered in
+[`experiments/2026-09-10-paired-recalibration/NOTES.md`](../experiments/2026-09-10-paired-recalibration/NOTES.md):
+arms are **warm-started from one checkpoint**, run on an **identical per-chunk seed schedule**, and
+read at **matched steps**. The unevenness then lands on both arms and cancels.
+
 
 **Runs are stopped on a step budget, not on a convergence test.** Constant-LR training here has
 never produced a detectable plateau: flat stretches lasting hours have repeatedly resumed improving,
@@ -94,8 +100,9 @@ measurement, and the only thing that keeps comparisons honest is that **every ar
 steps** — which the paired protocol already guarantees.
 
 This is also why single readings are never quoted as evidence of anything. A chunk's gain carries
-the seed effect of the slice it drew, spanning **+0.795** to **-0.396 dB** on a paired arm, so any
-one near-zero reading, and any one jump, is inside the noise. Where a trajectory's progress is
+the seed effect of the slice it drew — the same slice effect that shows up as a **5.4%** swing in
+the baseline's own validation loss — so any one near-zero reading, and any one jump, is inside the
+noise. Where a trajectory's progress is
 described, it is the trailing trend divided by the reading-to-reading spread, reported on the
 increment panel.
 

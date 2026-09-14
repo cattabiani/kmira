@@ -62,8 +62,43 @@ def _sampling_facts(cfg) -> dict:
     # back to the path they pass, keeping this reproducible on a fresh clone.
     index = cfg.dataset.train_index or (REPO / "data" / "rocket_science" / "train")
     ds = RocketScienceDataset.from_local(str(index))
-    frames = sorted((sum(e.chunk_frames) for e in ds.index.entries), reverse=True)
-    durations = [e.perspectives[0].duration for e in ds.index.entries]
+
+    # What actually varies between matches, measured rather than assumed. A Rocket League match is a
+    # fixed 5-minute game clock, so wall-clock duration is mostly goals: each goal adds a replay, a
+    # celebration and a kickoff, and a tie adds overtime. Duration is therefore a proxy for scoring
+    # rate, which is why "longer match = more of the same play" is the wrong mental model.
+    from mira.data.events import parse_anchors, replay_spans
+
+    per_match = []
+    for e in ds.index.entries:
+        persp = e.perspectives[0]
+        total_f = sum(e.chunk_frames)
+        events = parse_anchors(persp.anchors)
+        src_fps = total_f / persp.duration
+        spans = replay_spans(events, src_fps, persp.recording_offset_sec, total_f)
+        per_match.append(
+            {
+                "minutes": persp.duration / 60,
+                "frames": total_f,
+                "goals": sum(1 for x in events if x.event_name == "GoalScored"),
+                "replay_frac": sum(b - a for a, b in spans) / total_f,
+            }
+        )
+
+    def _corr(xs, ys):
+        mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+        num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
+        den = (sum((x - mx) ** 2 for x in xs) * sum((y - my) ** 2 for y in ys)) ** 0.5
+        return num / den if den else 0.0
+
+    per_match.sort(key=lambda m: m["minutes"])
+    q = len(per_match) // 4
+    short, long = per_match[:q], per_match[-q:]
+    def mean(rows, k):
+        return sum(r[k] for r in rows) / len(rows)
+
+    frames = sorted((m["frames"] for m in per_match), reverse=True)
+    durations = [m["minutes"] * 60 for m in per_match]
     total = sum(frames)
     return {
         "matches": len(frames),
@@ -75,9 +110,25 @@ def _sampling_facts(cfg) -> dict:
         "longest_over_shortest": round(frames[0] / frames[-1], 1),
         "top10_share_pct": round(100 * sum(frames[:10]) / total, 1),
         "top10_match_pct": round(100 * 10 / len(frames), 1),
+        "goals_min": min(m["goals"] for m in per_match),
+        "goals_median": sorted(m["goals"] for m in per_match)[len(per_match) // 2],
+        "goals_max": max(m["goals"] for m in per_match),
+        "corr_duration_goals": round(_corr([m["minutes"] for m in per_match],
+                                           [float(m["goals"]) for m in per_match]), 3),
+        "replay_share_pct": round(100 * mean(per_match, "replay_frac"), 1),
+        "short_quartile_minutes": round(mean(short, "minutes"), 1),
+        "short_quartile_goals": round(mean(short, "goals"), 1),
+        "short_quartile_replay_pct": round(100 * mean(short, "replay_frac"), 1),
+        "long_quartile_minutes": round(mean(long, "minutes"), 1),
+        "long_quartile_goals": round(mean(long, "goals"), 1),
+        "long_quartile_replay_pct": round(100 * mean(long, "replay_frac"), 1),
+        "short_quartile_live_minutes": round(mean(short, "minutes")
+                                             * (1 - mean(short, "replay_frac")), 1),
+        "long_quartile_live_minutes": round(mean(long, "minutes")
+                                            * (1 - mean(long, "replay_frac")), 1),
         "_note": (
             "uniform over clips, so proportional to match duration -- there is no per-match cap "
-            "and no reweighting"
+            "and no reweighting; duration tracks goals scored, not extra play"
         ),
     }
 

@@ -57,7 +57,8 @@ def trend_vs_spread(psnr, n=10):
     """Trailing trend in the PSNR curve, and how it compares to the reading-to-reading spread.
 
     THE PER-CHUNK INCREMENT IS THE WRONG ESTIMATOR NEAR THE ELBOW. A single chunk's gain carries the
-    seed effect of the slice it drew, measured on a paired arm at up to +0.795/-0.396 dB, so any one
+    seed effect of the slice it drew -- visible in this run's own validation curve as a swing of a
+    few percent locked to the seed period -- so any one
     near-zero reading -- or any one jump -- is inside the noise. Three consecutive near-zero chunks
     were called an elbow at step 224,000 on exactly this run, and the next readings moved again.
     Fitting a line through the last n chunks and dividing by the residual spread asks the question
@@ -135,7 +136,7 @@ def build():
     ax.annotate(
         f"last 3: {', '.join(f'{d:+.3f}' for d in dy[-3:])}\n"
         "one chunk is inside the seed noise\n"
-        f"(paired arm: +0.795 / -0.396 dB)\n\n"
+        "(a new data slice every chunk)\n\n"
         f"trend over last 10 chunks:\n"
         f"{_trend:+.3f} dB/10k, {_ratio:.0f}x the bounce\n"
         f"{'STILL CLIMBING' if _ratio >= 3 else 'FLAT within noise'}",
@@ -210,8 +211,8 @@ def stats_for(psnr, readings, steps) -> str:
             f"**Trend over the last 10 scored chunks: {trend:+.3f} dB per 10,000 steps**, against a "
             f"residual spread of {sd:.3f} dB between readings — a ratio of {ratio:.0f}x, so "
             f"{verdict}. The per-chunk increment alone cannot settle this: a chunk's gain carries "
-            f"the seed effect of the slice it drew, which spans +0.795 to -0.396 dB on a paired "
-            f"arm.\n"
+            f"the seed effect of the slice it drew; see the slice-effect section above, measured "
+            f"on this run alone.\n"
         ),
         (
             "The clean baseline: per-chunk seeds from step 0, 100% training-data coverage, constant "

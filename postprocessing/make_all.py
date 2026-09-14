@@ -118,14 +118,27 @@ def evaluation_row() -> str:
     return (
         "**How frames are drawn.** One sample is a within-chunk clip, and mira's `_plan_match` "
         "enumerates every clip of every match with no per-match cap, so the stream is uniform over "
-        "clips and therefore **proportional to match duration**: a longer match contributes more "
-        "samples than a shorter one, and nothing reweights it. Whether that matters is a property "
-        "of this dataset rather than of the loader, so it is measured -- "
-        f"{sm['matches']} matches of {sm['minutes_min']}-{sm['minutes_max']} minutes, "
-        f"{sm['frames_min']:,} to {sm['frames_max']:,} frames each (median "
-        f"{sm['frames_median']:,}). The longest match is **{sm['longest_over_shortest']}x** the "
-        f"shortest, and the ten longest hold **{sm['top10_share_pct']}%** of all frames while being "
-        f"{sm['top10_match_pct']}% of matches, so no match dominates the stream.\n\n"
+        "clips and therefore **proportional to match duration**. What that weights by is not "
+        "obvious, and is measured rather than assumed: a Rocket League match has a fixed 5-minute "
+        "game clock, so duration is mostly a count of goals -- each one adds a replay, a "
+        "celebration and a kickoff, and a tie adds overtime.\n\n"
+        f"- {sm['matches']} matches, {sm['minutes_min']}-{sm['minutes_max']} minutes, "
+        f"{sm['goals_min']}-{sm['goals_max']} goals (median {sm['goals_median']}).\n"
+        f"- Duration correlates with goals at **r = {sm['corr_duration_goals']}**.\n"
+        f"- Shortest quartile: {sm['short_quartile_minutes']} min, "
+        f"{sm['short_quartile_goals']} goals, {sm['short_quartile_replay_pct']}% replay frames. "
+        f"Longest quartile: {sm['long_quartile_minutes']} min, {sm['long_quartile_goals']} goals, "
+        f"{sm['long_quartile_replay_pct']}% replay frames.\n"
+        f"- Net of replays, live play differs far less than duration does: "
+        f"{sm['short_quartile_live_minutes']} vs {sm['long_quartile_live_minutes']} minutes.\n"
+        f"- **{sm['replay_share_pct']}%** of training frames are goal-replay footage, because "
+        "`exclude_replays` is false for training. mira's trainer hardcodes it TRUE for validation, "
+        "and `eval_codec` sets it TRUE for scoring, so replay footage is trained on but never "
+        "validated or scored.\n\n"
+        f"So duration-proportional sampling over-weights high-scoring matches, and the longest "
+        f"match contributes **{sm['longest_over_shortest']}x** the frames of the shortest. The ten "
+        f"longest hold {sm['top10_share_pct']}% of all frames while being {sm['top10_match_pct']}% "
+        "of matches, so no single match dominates.\n\n"
         "**Scoring**, as recorded in every row of `benchmark.jsonl`: "
         f"{'/'.join(f'{f:,}' for f in frames)} held-out frames at a fixed evaluation seed "
         f"{'/'.join(str(s) for s in seeds)}, reporting {', '.join(metrics)}.\n\n"
@@ -188,6 +201,46 @@ def run_metadata_table() -> str:
         "holds both its constant-LR chunks and the cosine ones.\n"
     )
     return "\n".join(lines)
+
+
+def slice_effect_from_baseline() -> str:
+    """Evidence that the data slice moves the metric, taken from the BASELINE ALONE.
+
+    The paired protocol used to be justified with per-chunk gains measured on the warm-start arms.
+    Those arms are being redone, so quoting them in the results would be presenting a conclusion
+    from an experiment that no longer stands. The same effect is visible without them: each 8,000-
+    step chunk draws a new seed, and the validation curve carries an oscillation locked to that
+    period, with the same phase in every chunk. A restart transient would decay; this does not.
+    """
+    import statistics
+
+    blob = json.loads((HERE / "data" / "run_metadata.json").read_text())["runs"]["ablation_baseline"]
+    by_step = {r["step"]: r["loss_total"] for r in blob["readings"]}
+    # Settled region only, so the shape is the slice and not the initial descent.
+    steps = sorted(s for s in by_step if s >= 120_000)
+    by_offset: dict[int, list[float]] = {}
+    for s in steps:
+        by_offset.setdefault(s % 8000, []).append(by_step[s])
+    means = {k: statistics.mean(v) for k, v in by_offset.items()}
+    lo, hi = min(means.values()), max(means.values())
+    rows = "\n".join(
+        f"| {k:,} |{' **boundary — where PSNR is scored**' if k == 0 else ''} | {means[k]:.4f} |"
+        for k in sorted(means)
+    )
+    return (
+        "### The data slice moves the metric — measured on the baseline alone\n\n"
+        "Each 8,000-step chunk draws a new seed, so a seed identifies a slice of the training "
+        "stream. Averaging the baseline's validation loss by position within that period, over "
+        f"**{len(steps)}** readings from step 120,000 on (settled region only, so this is not the "
+        "initial descent):\n\n"
+        "| step offset in the seed period | | mean `loss_total` |\n|---|---|---|\n"
+        f"{rows}\n\n"
+        f"Peak-to-trough **{hi - lo:.4f}**, or **{100 * (hi - lo) / lo:.1f}%** of the term. The same "
+        "phase repeats in every chunk, so it is a property of the slice rather than a restart "
+        "transient, which would decay. PSNR is always scored at offset 0, identically for every "
+        "arm, so this biases no comparison — but it is why a single reading is not evidence, and "
+        "why arms must be read at matched steps.\n"
+    )
 
 
 def protocol_evidence() -> str:
@@ -299,6 +352,7 @@ def main() -> None:
     sections: list[str] = [
         f"<!-- from make_all.py -->\n\n{setup_table()}",
         f"<!-- from make_all.py -->\n\n{run_metadata_table()}",
+        f"<!-- from make_all.py -->\n\n{slice_effect_from_baseline()}",
         f"<!-- from make_all.py -->\n\n{protocol_evidence()}",
         f"<!-- from make_all.py -->\n\n{superseded_baseline()}",
     ]

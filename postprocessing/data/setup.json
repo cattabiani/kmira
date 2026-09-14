@@ -59,7 +59,20 @@
     "longest_over_shortest": 2.1,
     "top10_share_pct": 7.3,
     "top10_match_pct": 5.6,
-    "_note": "uniform over clips, so proportional to match duration -- there is no per-match cap and no reweighting"
+    "goals_min": 1,
+    "goals_median": 6,
+    "goals_max": 12,
+    "corr_duration_goals": 0.786,
+    "replay_share_pct": 13.9,
+    "short_quartile_minutes": 6.2,
+    "short_quartile_goals": 3.7,
+    "short_quartile_replay_pct": 9.6,
+    "long_quartile_minutes": 8.5,
+    "long_quartile_goals": 8.8,
+    "long_quartile_replay_pct": 17.1,
+    "short_quartile_live_minutes": 5.6,
+    "long_quartile_live_minutes": 7.0,
+    "_note": "uniform over clips, so proportional to match duration -- there is no per-match cap and no reweighting; duration tracks goals scored, not extra play"
   },
   "optim": {
     "lr": 0.0001,

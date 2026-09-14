@@ -27,7 +27,15 @@ file's prose appears here. Sources: `codec/results/benchmark.jsonl` (written by
 | compression | 442,368 → 4,608 values per frame = **96×**, spatial only |
 | optimiser | AdamW lr 0.0001, betas [0.9, 0.95], weight decay 0.1 |
 
-**How frames are drawn.** One sample is a within-chunk clip, and mira's `_plan_match` enumerates every clip of every match with no per-match cap, so the stream is uniform over clips and therefore **proportional to match duration**: a longer match contributes more samples than a shorter one, and nothing reweights it. Whether that matters is a property of this dataset rather than of the loader, so it is measured -- 179 matches of 5.3-11.0 minutes, 6,320 to 13,200 frames each (median 8,560). The longest match is **2.1x** the shortest, and the ten longest hold **7.3%** of all frames while being 5.6% of matches, so no match dominates the stream.
+**How frames are drawn.** One sample is a within-chunk clip, and mira's `_plan_match` enumerates every clip of every match with no per-match cap, so the stream is uniform over clips and therefore **proportional to match duration**. What that weights by is not obvious, and is measured rather than assumed: a Rocket League match has a fixed 5-minute game clock, so duration is mostly a count of goals -- each one adds a replay, a celebration and a kickoff, and a tie adds overtime.
+
+- 179 matches, 5.3-11.0 minutes, 1-12 goals (median 6).
+- Duration correlates with goals at **r = 0.786**.
+- Shortest quartile: 6.2 min, 3.7 goals, 9.6% replay frames. Longest quartile: 8.5 min, 8.8 goals, 17.1% replay frames.
+- Net of replays, live play differs far less than duration does: 5.6 vs 7.0 minutes.
+- **13.9%** of training frames are goal-replay footage, because `exclude_replays` is false for training. mira's trainer hardcodes it TRUE for validation, and `eval_codec` sets it TRUE for scoring, so replay footage is trained on but never validated or scored.
+
+So duration-proportional sampling over-weights high-scoring matches, and the longest match contributes **2.1x** the frames of the shortest. The ten longest hold 7.3% of all frames while being 5.6% of matches, so no single match dominates.
 
 **Scoring**, as recorded in every row of `benchmark.jsonl`: 2,048 held-out frames at a fixed evaluation seed 37, reporting psnr, ssim, lpips, p_dino, r_fdd.
 
@@ -61,6 +69,28 @@ Captured by `extract_run_metadata.py`. `benchmark.jsonl` holds the scored PSNR r
 - `warmstart_control vs warmstart_learn7`: 12 shared seeds, identical over the shared range: **True**
 
 Note `plateau_baseline` (RESULTS.md calls it *the baseline run*) reads as mixed because `run_anneal.sh` continues into that run's own output directory, so the log holds both its constant-LR chunks and the cosine ones.
+
+
+---
+
+<!-- from make_all.py -->
+
+### The data slice moves the metric — measured on the baseline alone
+
+Each 8,000-step chunk draws a new seed, so a seed identifies a slice of the training stream. Averaging the baseline's validation loss by position within that period, over **146** readings from step 120,000 on (settled region only, so this is not the initial descent):
+
+| step offset in the seed period | | mean `loss_total` |
+|---|---|---|
+| 0 | **boundary — where PSNR is scored** | 0.2221 |
+| 1,000 | | 0.2217 |
+| 2,000 | | 0.2273 |
+| 3,000 | | 0.2265 |
+| 4,000 | | 0.2213 |
+| 5,000 | | 0.2170 |
+| 6,000 | | 0.2156 |
+| 7,000 | | 0.2162 |
+
+Peak-to-trough **0.0117**, or **5.4%** of the term. The same phase repeats in every chunk, so it is a property of the slice rather than a restart transient, which would decay. PSNR is always scored at offset 0, identically for every arm, so this biases no comparison — but it is why a single reading is not evidence, and why arms must be read at matched steps.
 
 
 ---
@@ -137,7 +167,7 @@ At step 56,000 — the end of the superseded run's fixed-seed stretch — the de
 
 ### baseline_v2 — WIP readout at step 265,000
 
-**Trend over the last 10 scored chunks: +0.019 dB per 10,000 steps**, against a residual spread of 0.010 dB between readings — a ratio of 13x, so still climbing -- the trend is well clear of the bounce. The per-chunk increment alone cannot settle this: a chunk's gain carries the seed effect of the slice it drew, which spans +0.795 to -0.396 dB on a paired arm.
+**Trend over the last 10 scored chunks: +0.019 dB per 10,000 steps**, against a residual spread of 0.010 dB between readings — a ratio of 13x, so still climbing -- the trend is well clear of the bounce. The per-chunk increment alone cannot settle this: a chunk's gain carries the seed effect of the slice it drew; see the slice-effect section above, measured on this run alone.
 
 The clean baseline: per-chunk seeds from step 0, 100% training-data coverage, constant LR 1e-4, no anneal yet. Still training, so every number here moves.
 
