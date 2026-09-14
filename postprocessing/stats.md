@@ -27,6 +27,8 @@ file's prose appears here. Sources: `codec/results/benchmark.jsonl` (written by
 | compression | 442,368 → 4,608 values per frame = **96×**, spatial only |
 | optimiser | AdamW lr 0.0001, betas [0.9, 0.95], weight decay 0.1 |
 
+**How frames are drawn.** One sample is a within-chunk clip, and mira's `_plan_match` enumerates every clip of every match with no per-match cap, so the stream is uniform over clips and therefore **proportional to match duration**: a longer match contributes more samples than a shorter one, and nothing reweights it. Whether that matters is a property of this dataset rather than of the loader, so it is measured -- 179 matches of 5.3-11.0 minutes, 6,320 to 13,200 frames each (median 8,560). The longest match is **2.1x** the shortest, and the ten longest hold **7.3%** of all frames while being 5.6% of matches, so no match dominates the stream.
+
 **Scoring**, as recorded in every row of `benchmark.jsonl`: 2,048 held-out frames at a fixed evaluation seed 37, reporting psnr, ssim, lpips, p_dino, r_fdd.
 
 **Validation**, as recorded in the run logs: every 1,000 steps on mira's own 512-sample split.

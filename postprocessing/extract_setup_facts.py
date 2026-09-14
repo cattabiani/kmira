@@ -47,6 +47,41 @@ def decoder_shape(model_name: str, *, count_params: bool = False) -> dict:
     return out
 
 
+def _sampling_facts(cfg) -> dict:
+    """How the training stream draws frames, measured from the dataset index.
+
+    The question this answers is whether long matches crowd out short ones. They do, in the sense
+    that sampling is uniform over CLIPS rather than over matches: mira's `_plan_match` enumerates
+    every within-chunk clip of every match with no per-match cap, so a match contributes samples in
+    proportion to its duration. Whether that matters is an empirical question about this dataset,
+    not a property of the loader, so the skew is measured here rather than asserted.
+    """
+    from mira.data.dataset import RocketScienceDataset
+
+    # The config leaves train_index null -- both launchers pass it on the command line -- so fall
+    # back to the path they pass, keeping this reproducible on a fresh clone.
+    index = cfg.dataset.train_index or (REPO / "data" / "rocket_science" / "train")
+    ds = RocketScienceDataset.from_local(str(index))
+    frames = sorted((sum(e.chunk_frames) for e in ds.index.entries), reverse=True)
+    durations = [e.perspectives[0].duration for e in ds.index.entries]
+    total = sum(frames)
+    return {
+        "matches": len(frames),
+        "frames_min": frames[-1],
+        "frames_median": frames[len(frames) // 2],
+        "frames_max": frames[0],
+        "minutes_min": round(min(durations) / 60, 1),
+        "minutes_max": round(max(durations) / 60, 1),
+        "longest_over_shortest": round(frames[0] / frames[-1], 1),
+        "top10_share_pct": round(100 * sum(frames[:10]) / total, 1),
+        "top10_match_pct": round(100 * 10 / len(frames), 1),
+        "_note": (
+            "uniform over clips, so proportional to match duration -- there is no per-match cap "
+            "and no reweighting"
+        ),
+    }
+
+
 def main() -> None:
     use_cached_hub_repos()
     with initialize_config_dir(config_dir=str(CONFIGS), version_base=None):
@@ -100,6 +135,7 @@ def main() -> None:
             "reduction_x": round(per_frame / latent, 1),
             "_note": "spatial only -- timesteps=1 and temporal_stride=1, so no temporal compression",
         },
+        "sampling": _sampling_facts(cfg),
         "optim": {
             "lr": cfg.optim.optimizer.lr,
             "betas": list(cfg.optim.optimizer.betas),

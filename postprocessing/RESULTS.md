@@ -59,6 +59,18 @@ a checkpoint, a validation reading and a scoring pass. A run is therefore a curv
 endpoint, and can be stopped and resumed on any chunk boundary because the learning rate is held
 constant.
 
+**Frames are drawn uniformly over clips, so long matches count for more.** A sample is a
+within-chunk clip, and every clip of every match is enumerated with no per-match cap. Nothing
+equalises the matches: a match contributes samples in proportion to its duration, so an 11-minute
+match supplies roughly twice as many as a 5-minute one. That is a deliberate property worth stating
+rather than a defect — it makes the stream uniform over *frames of play*, which is what the codec is
+asked to reconstruct — but it does mean per-match statistics are duration-weighted.
+
+What keeps it from mattering here is that the matches are close in length: **179** matches of
+**5.3–11.0** minutes, the longest **2.1×** the shortest, with the ten longest holding **7.3%** of
+all frames while being 5.6% of matches. No match dominates the stream, so no reweighting is applied.
+On a corpus with a heavier tail this would need revisiting before any per-match claim.
+
 **Comparisons are paired, and this is not optional.** Each chunk draws its training stream from a
 per-chunk seed, so a seed identifies a slice of training data — and the slices are far from
 equivalent. Measured over 21 chunks of a paired arm, where a chunk's gain cannot be the

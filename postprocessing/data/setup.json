@@ -49,6 +49,18 @@
     "reduction_x": 96.0,
     "_note": "spatial only -- timesteps=1 and temporal_stride=1, so no temporal compression"
   },
+  "sampling": {
+    "matches": 179,
+    "frames_min": 6320,
+    "frames_median": 8560,
+    "frames_max": 13200,
+    "minutes_min": 5.3,
+    "minutes_max": 11.0,
+    "longest_over_shortest": 2.1,
+    "top10_share_pct": 7.3,
+    "top10_match_pct": 5.6,
+    "_note": "uniform over clips, so proportional to match duration -- there is no per-match cap and no reweighting"
+  },
   "optim": {
     "lr": 0.0001,
     "betas": [

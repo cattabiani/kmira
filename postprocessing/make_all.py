@@ -114,8 +114,19 @@ def evaluation_row() -> str:
     blob = json.loads((HERE / "data" / "run_metadata.json").read_text())["runs"]
     steps = [r["step"] for r in blob["ablation_baseline"]["readings"]]
     gaps = sorted({b - a for a, b in itertools.pairwise(steps)})
+    sm = json.loads((HERE / "data" / "setup.json").read_text())["sampling"]
     return (
-        f"**Scoring**, as recorded in every row of `benchmark.jsonl`: "
+        "**How frames are drawn.** One sample is a within-chunk clip, and mira's `_plan_match` "
+        "enumerates every clip of every match with no per-match cap, so the stream is uniform over "
+        "clips and therefore **proportional to match duration**: a longer match contributes more "
+        "samples than a shorter one, and nothing reweights it. Whether that matters is a property "
+        "of this dataset rather than of the loader, so it is measured -- "
+        f"{sm['matches']} matches of {sm['minutes_min']}-{sm['minutes_max']} minutes, "
+        f"{sm['frames_min']:,} to {sm['frames_max']:,} frames each (median "
+        f"{sm['frames_median']:,}). The longest match is **{sm['longest_over_shortest']}x** the "
+        f"shortest, and the ten longest hold **{sm['top10_share_pct']}%** of all frames while being "
+        f"{sm['top10_match_pct']}% of matches, so no match dominates the stream.\n\n"
+        "**Scoring**, as recorded in every row of `benchmark.jsonl`: "
         f"{'/'.join(f'{f:,}' for f in frames)} held-out frames at a fixed evaluation seed "
         f"{'/'.join(str(s) for s in seeds)}, reporting {', '.join(metrics)}.\n\n"
         f"**Validation**, as recorded in the run logs: every {gaps[0]:,} steps on mira's own "
