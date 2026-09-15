@@ -29,6 +29,7 @@ sys.path.insert(0, str(ARCHIVE))
 # rests on first, then the experiments built on top of it.
 FIGURES = [
     ("plot_baseline_v2", "baseline_v2_progress"),
+    ("plot_arms", "arms"),
 ]
 
 # Figures of the RETIRED baseline's studies. Their scripts, their figures and their numbers all

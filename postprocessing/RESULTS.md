@@ -70,9 +70,10 @@ progress is read as a trailing trend, never off a single chunk.
 
 ![baseline_v2 progress](figures/baseline_v2_progress.png)
 
-A cold start under the protocol above: constant LR 1e-4 after a 1,000-step warmup, no anneal yet.
-It is **still training**, so the prose here stays qualitative and the numbers live in
-[`stats.md`](stats.md), which carries its generation date.
+A cold start under the protocol above: constant LR 1e-4 after a 1,000-step warmup to 264,000
+steps, then a 32,000-step cosine decay to min_lr. The anneal is worth **+0.2498 dB**
+(24.6624 → **24.9122 dB**), and that endpoint is the fixed reference every arm is read against.
+Numbers throughout are quoted from [`stats.md`](stats.md), which carries its generation date.
 
 What the six panels show:
 
@@ -86,20 +87,32 @@ Two caveats that are properties of the instrumentation, not of the model:
 
 - **`loss_dino_latent_consistency` has reached mira's four-decimal logging resolution.** Its flat
   line is rounding, not convergence; nothing about that term's ceiling can be read from this log.
-- **It has not converged, and is not claimed to have.** The trend over the last ten scored chunks
-  is **+0.019 dB per 10,000 steps** against a between-reading spread of **0.010 dB** — a ratio of
-  **13x**, so the curve is still climbing where it stands. Runs on this rig have repeatedly gone
-  flat for hours and then resumed, so this is reported as a budget, not as a ceiling: the reference
-  point is *trained to N steps under a fixed recipe*, and every arm compared against it is read at
-  the same steps.
+- **It was still improving when the constant-LR phase was stopped**, at **+0.019 dB per 10,000
+  steps** against a between-reading spread of **0.010 dB**. The stopping point is a budget, not a
+  ceiling, so the reference is *trained to this recipe* rather than *trained to convergence* — which
+  is why every arm is read at matched steps against it.
 
-## 4. In progress
+## 4. Does the benchmark resolve a known effect?
 
-The rest of this page is being rewritten. Queued: the baseline's anneal, a frozen-bottleneck
-ablation, a second-seed baseline, and the learned layer-aggregation studies — all under the locked
-recipe above. Earlier studies that ran against a superseded baseline are archived at
-[`archive/RESULTS-legacy-baseline.md`](archive/RESULTS-legacy-baseline.md); their magnitudes do not
-carry over and nothing here depends on them.
+![baseline and the frozen-bottleneck ablation](figures/arms.png)
 
-Until the ablation and the second seed land, this benchmark has **no demonstration that it can
-resolve an effect of the size it is asked to judge**.
+The open question for any benchmark is whether it can separate arms at all. The test is mira's own
+frozen-bottleneck ablation: replace the trained linear bottleneck with a random frozen one and
+train everything else identically. mira report roughly **1.4 dB** for it.
+
+Both arms run the locked recipe from the same seed base, so at any step they have trained on the
+same data and the gap is attributable to the bottleneck. Over the four matched readings so far, the
+frozen arm sits **1.4470 to 1.7352 dB** below the baseline — the effect is resolved, at a size
+consistent with the published one.
+
+Two limits on how far that goes. The ablation has run **32,000** of the baseline's **296,000** steps,
+so this is an early-training comparison and the gap may still move. And a single pair cannot
+separate the intervention from run-to-run spread; the second-seed baseline, which measures that
+spread directly, has not run yet.
+
+## 5. In progress
+
+Queued under the same recipe: the second-seed baseline, the rest of the frozen ablation, and the
+learned layer-aggregation studies. Earlier studies that ran against a superseded baseline are
+archived at [`archive/RESULTS-legacy-baseline.md`](archive/RESULTS-legacy-baseline.md); their
+magnitudes do not carry over and nothing here depends on them.
