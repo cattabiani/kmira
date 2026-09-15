@@ -6,9 +6,9 @@ bottleneck, and a ViT decoder — and the world model predicts in the latent tha
 This repository reproduces that codec at a scale that fits one consumer GPU, and uses it as a
 benchmark for changes to the codec design.
 
-**Status.** The benchmark and its training protocol are built and characterised. The reference
-baseline is training now; section 3 is its live trajectory. Comparative studies are queued
-(section 4).
+**Status.** The benchmark and its training protocol are built and characterised, the reference
+baseline is trained and annealed, and the first ablation against it resolves the effect it was
+meant to. Section 3 has both; the remaining studies are queued (section 4).
 
 **Every figure and number here is generated from the run record, not written.** The numbers are
 quoted from [`stats.md`](stats.md); if the two disagree, `stats.md` is right.
@@ -66,51 +66,31 @@ absolute step. Every arm runs it and is read at matched steps. Pre-registered in
 length is a decision rather than a measurement. Consecutive chunks train on different data, so
 progress is read as a trailing trend, never off a single chunk.
 
-## 3. The reference baseline
+## 3. The arms
 
-![baseline_v2 progress](figures/baseline_v2_progress.png)
+![every arm under the locked recipe](figures/arms.png)
 
-A cold start under the protocol above: constant LR 1e-4 after a 1,000-step warmup to 264,000
-steps, then a 32,000-step cosine decay to min_lr. The anneal is worth **+0.2498 dB**
-(24.6624 → **24.9122 dB**), and that endpoint is the fixed reference every arm is read against.
-Numbers throughout are quoted from [`stats.md`](stats.md), which carries its generation date.
+**The baseline.** A cold start under the recipe above: constant LR to 264,000 steps, reaching
+**24.6624 dB** and still improving at **+0.019 dB per 10,000 steps** against a between-reading
+spread of **0.010 dB** — a ratio of **13x**, so it was stopped on budget, not at a ceiling. A
+32,000-step cosine decay then took it to **24.9122 dB** at step **296,000**, worth **+0.2498 dB**.
+That endpoint is the fixed reference every arm is read against.
 
-What the six panels show:
+**The frozen-bottleneck ablation** is the test of whether this benchmark separates arms at all:
+replace the trained linear bottleneck with a random frozen one, train everything else identically.
+mira report roughly **1.4 dB** for it. Over eight matched readings the frozen arm sits **1.4470** to
+**1.7352 dB** below the baseline — the effect is resolved, at a size consistent with the published
+one. It has run to **64,000** steps and is still going.
 
-- **PSNR and its per-chunk increment.** The increment panel carries the trend-versus-noise
-  readout, which is the one to read for whether the run is still improving.
-- **mira's four validation loss terms**, each on its own axis — they span three orders of
-  magnitude, so a shared axis would flatten three of them into a line. Each panel reports its own
-  trailing slope, because `loss_total` is dominated by `loss_lpips_perceptual` and hides the rest.
+The validation panels say where that gap comes from. `loss_lpips_perceptual` and `loss_mae` both
+separate the arms; `loss_dino_latent_consistency` sits at mira's four-decimal logging floor for
+both, so nothing about that term can be read from these logs.
 
-Two caveats that are properties of the instrumentation, not of the model:
+Two limits. This is an early-training comparison, and the gap may still move. And a single pair
+cannot separate the intervention from run-to-run spread — the second-seed baseline, which measures
+that spread directly, has **not yet run**.
 
-- **`loss_dino_latent_consistency` has reached mira's four-decimal logging resolution.** Its flat
-  line is rounding, not convergence; nothing about that term's ceiling can be read from this log.
-- **It was still improving when the constant-LR phase was stopped**, at **+0.019 dB per 10,000
-  steps** against a between-reading spread of **0.010 dB**. The stopping point is a budget, not a
-  ceiling, so the reference is *trained to this recipe* rather than *trained to convergence* — which
-  is why every arm is read at matched steps against it.
-
-## 4. Does the benchmark resolve a known effect?
-
-![baseline and the frozen-bottleneck ablation](figures/arms.png)
-
-The open question for any benchmark is whether it can separate arms at all. The test is mira's own
-frozen-bottleneck ablation: replace the trained linear bottleneck with a random frozen one and
-train everything else identically. mira report roughly **1.4 dB** for it.
-
-Both arms run the locked recipe from the same seed base, so at any step they have trained on the
-same data and the gap is attributable to the bottleneck. Over the four matched readings so far, the
-frozen arm sits **1.4470 to 1.7352 dB** below the baseline — the effect is resolved, at a size
-consistent with the published one.
-
-Two limits on how far that goes. The ablation has run **32,000** of the baseline's **296,000** steps,
-so this is an early-training comparison and the gap may still move. And a single pair cannot
-separate the intervention from run-to-run spread; the second-seed baseline, which measures that
-spread directly, has not run yet.
-
-## 5. In progress
+## 4. In progress
 
 Queued under the same recipe: the second-seed baseline, the rest of the frozen ablation, and the
 learned layer-aggregation studies. Earlier studies that ran against a superseded baseline are

@@ -24,6 +24,11 @@ valid. See postprocessing/archive/RESULTS-legacy-baseline.md.
 
 from __future__ import annotations
 
+import pathlib as _pathlib
+import sys as _sys
+
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent.parent))
+
 import itertools
 import json
 

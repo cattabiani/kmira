@@ -28,7 +28,6 @@ sys.path.insert(0, str(ARCHIVE))
 # (module, figure basename) in the order they appear in RESULTS.md: the foundation the benchmark
 # rests on first, then the experiments built on top of it.
 FIGURES = [
-    ("plot_baseline_v2", "baseline_v2_progress"),
     ("plot_arms", "arms"),
 ]
 
@@ -45,6 +44,7 @@ ARCHIVED_FIGURES = [
     ("plot_metric_panel", "metric_panel"),
     ("plot_metric_signature", "metric_signature"),
     ("plot_layer_weights", "layer_weight_shares"),
+    ("plot_baseline_v2", "baseline_v2_progress"),
 ]
 
 

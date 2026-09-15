@@ -49,7 +49,8 @@ Captured by `extract_run_metadata.py`. `benchmark.jsonl` holds the scored PSNR r
 | `A_baseline` | 20 | 1 | 1 | 28–28 (1) | cosine |
 | `B_frozen_bneck` | 20 | 1 | 1 | 28–28 (1) | cosine |
 | `C_baseline_seed2` | 20 | 1 | 1 | 1234–1234 (1) | cosine |
-| `ablation_baseline` | 266 | 33 | 45 | 1029–1062 (34) | constant |
+| `ablation_baseline` | 297 | 33 | 49 | 1029–1065 (37) | mixed (45 constant, 4 cosine) |
+| `ablation_frozen_bneck` | 65 | 8 | 8 | 1029–1036 (8) | constant |
 | `plateau_baseline` | 305 | 34 | 44 | 28–66 (32) | mixed (40 constant, 4 cosine) |
 | `warmstart_control` | 201 | 25 | 29 | 28–52 (25) | constant |
 | `warmstart_learn7` | 97 | 12 | 12 | 28–39 (12) | constant |
@@ -133,77 +134,25 @@ At step 56,000 — the end of the superseded run's fixed-seed stretch — the de
 
 ---
 
-<!-- from plot_baseline_v2.py -->
-
-### baseline_v2 — WIP readout at step 265,000
-
-**Trend over the last 10 scored chunks: +0.019 dB per 10,000 steps**, against a residual spread of 0.010 dB between readings — a ratio of 13x, so still climbing -- the trend is well clear of the bounce. The per-chunk increment alone cannot settle this: a chunk's gain carries the data it drew, which differs from chunk to chunk.
-
-The clean baseline: per-chunk seeds from step 0, 100% training-data coverage, constant LR 1e-4, no anneal yet. Still training, so every number here moves.
-
-| step | PSNR (dB) | Δ per 8k |
-|---|---|---|
-| 8,000 | 19.4849 |  |
-| 16,000 | 20.2993 | +0.814 |
-| 24,000 | 20.7414 | +0.442 |
-| 32,000 | 21.9561 | +1.215 |
-| 40,000 | 22.5956 | +0.640 |
-| 48,000 | 22.9129 | +0.317 |
-| 56,000 | 23.1378 | +0.225 |
-| 64,000 | 23.3574 | +0.220 |
-| 72,000 | 23.5159 | +0.159 |
-| 80,000 | 23.6644 | +0.149 |
-| 88,000 | 23.7954 | +0.131 |
-| 96,000 | 23.8692 | +0.074 |
-| 104,000 | 23.8985 | +0.029 |
-| 112,000 | 24.0971 | +0.199 |
-| 120,000 | 24.1795 | +0.082 |
-| 128,000 | 24.2200 | +0.041 |
-| 136,000 | 24.2568 | +0.037 |
-| 144,000 | 24.2849 | +0.028 |
-| 152,000 | 24.2893 | +0.004 |
-| 160,000 | 24.3376 | +0.048 |
-| 168,000 | 24.3822 | +0.045 |
-| 176,000 | 24.4321 | +0.050 |
-| 184,000 | 24.4579 | +0.026 |
-| 192,000 | 24.4971 | +0.039 |
-| 200,000 | 24.5327 | +0.036 |
-| 208,000 | 24.5354 | +0.003 |
-| 216,000 | 24.5512 | +0.016 |
-| 224,000 | 24.5640 | +0.013 |
-| 232,000 | 24.5729 | +0.009 |
-| 240,000 | 24.5928 | +0.020 |
-| 248,000 | 24.6076 | +0.015 |
-| 256,000 | 24.6085 | +0.001 |
-| 264,000 | 24.6624 | +0.054 |
-
-Validation loss terms, trailing slope over the last 8 readings:
-
-| term | latest | trailing slope per 10k steps |
-|---|---|---|
-| `loss_total` | 0.2131 | -0.0128 |
-| `loss_mae` | 0.056 | -0.00321 |
-| `loss_lpips_perceptual` | 0.1571 | -0.00951 |
-| `loss_dino_latent_consistency` | 0.0001 | — at the log's 4-dp floor |
-
-A term whose trailing slope is small relative to its own value has stopped moving; read each separately, because `loss_total` is dominated by `loss_lpips_perceptual` and hides the other two.
-
-
----
-
 <!-- from plot_arms.py -->
 
-### The baseline, and the first arm read against it
+### The arms
 
-**The anneal.** Constant LR to 264,000 reached **24.6624 dB**; a 32,000-step cosine decay to min_lr took it to **24.9122 dB** at step **296,000**, a gain of **+0.2498 dB**. That is the fixed reference every arm is read against.
+**Baseline.** Constant LR to 264,000 reached **24.6624 dB**, still improving at **+0.019 dB per 10,000 steps** against a between-reading spread of **0.010 dB** — a ratio of **13x**, so it was stopped on budget rather than at a ceiling. A 32,000-step cosine decay to min_lr then took it to **24.9122 dB** at step **296,000**, a gain of **+0.2498 dB**. That endpoint is the fixed reference every arm is read against.
 
-**Frozen bottleneck, at matched steps.** A random frozen bottleneck against the trained one, same seed base so the same data chunk for chunk:
+**Frozen bottleneck, at matched steps.** Same recipe and seed base as the baseline, so the same data chunk for chunk:
 
-| step | frozen | baseline | gap |
+| step | this arm | baseline | gap |
 |---|---|---|---|
 | 8,000 | 18.0379 | 19.4849 | **+1.4470** |
 | 16,000 | 18.6870 | 20.2993 | **+1.6122** |
 | 24,000 | 19.0062 | 20.7414 | **+1.7352** |
 | 32,000 | 20.3265 | 21.9561 | **+1.6295** |
+| 40,000 | 21.0472 | 22.5956 | **+1.5484** |
+| 48,000 | 21.3139 | 22.9129 | **+1.5990** |
+| 56,000 | 21.4951 | 23.1378 | **+1.6426** |
+| 64,000 | 21.6904 | 23.3574 | **+1.6670** |
 
-The gap runs **1.4470** to **1.7352 dB** over 4 matched readings. Still running.
+The gap runs **1.4470** to **1.7352 dB** over 8 matched readings, through step **64,000**.
+
+**Not yet run:** baseline, seed 2.
