@@ -1,10 +1,11 @@
 """Figure: the baseline's full trajectory, and the first paired comparison against it.
 
-TWO ENTITIES, NOT THREE CURVES. The constant-LR stretch and the cosine anneal are one run --
-`baseline_v2`, continued into its own output directory -- so they share a colour and are separated
-by line style and a marked transition, not by hue. The frozen-bottleneck ablation is a different
-model and carries its own colour. Colouring the anneal as a third entity would imply three things
-were compared; two were.
+THREE CURVES. The constant-LR stretch and the cosine anneal are one run -- `baseline_v2`, continued
+into its own output directory -- and were first drawn in one colour separated by line style, on the
+argument that they are one entity and only two things were compared. That was correct and useless:
+against 264,000 steps of solid line, a 32,000-step dotted tail is invisible. The anneal now carries
+its own colour. It is still a phase of the baseline rather than a third arm, which the label and the
+marked transition say instead.
 
 WHY TWO PANELS. The ablation has run 32,000 steps against the baseline's 296,000. On one axis it is
 a stub in the corner and the comparison is invisible, so the right panel re-plots the matched range
@@ -27,6 +28,7 @@ from lib import GRID, INK, INK_SOFT, SURFACE
 
 # Colour follows the entity: the baseline keeps slot 1 wherever it appears, the ablation slot 2.
 C_BASE = "#2a78d6"
+C_ANNEAL = "#1baf7a"
 C_FROZEN = "#eb6834"
 
 RUNS = {"baseline": "ablation_baseline", "frozen": "ablation_frozen_bneck"}
@@ -73,14 +75,15 @@ def build():
         ax.plot(
             [s for s, _ in ann],
             [p for _, p in ann],
-            color=C_BASE,
+            color=C_ANNEAL,
             linewidth=2.6,
-            linestyle=(0, (1, 1.1)),
+            marker="o",
+            markersize=4,
             zorder=4,
         )
         ax.axvline(cut, color=INK_SOFT, linewidth=0.9, linestyle=(0, (4, 3)), zorder=1)
         ax.annotate(
-            f"cosine anneal\nfrom {cut:,}",
+            f"anneal starts\n{cut:,}",
             xy=(cut, base[0][1] + 0.35),
             xytext=(-8, 0),
             textcoords="offset points",
@@ -90,14 +93,14 @@ def build():
             color=INK_SOFT,
         )
         ax.annotate(
-            f"{ann[-1][1]:.3f} dB",
+            f"cosine anneal\n{ann[-1][1]:.3f} dB",
             xy=(ann[-1][0], ann[-1][1]),
-            xytext=(-4, -22),
+            xytext=(-6, -34),
             textcoords="offset points",
             ha="center",
             fontsize=9,
             fontweight="bold",
-            color=C_BASE,
+            color=C_ANNEAL,
         )
     if frozen:
         ax.plot(
@@ -119,8 +122,8 @@ def build():
             fontweight="bold",
         )
     ax.annotate(
-        "baseline",
-        xy=(base[len(base) // 2][0], base[len(base) // 2][1]),
+        "baseline, constant LR",
+        xy=(base[len(base) // 3][0], base[len(base) // 3][1]),
         xytext=(0, -20),
         textcoords="offset points",
         ha="center",
