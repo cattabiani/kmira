@@ -70,7 +70,10 @@ improving when stopped. Waiting for a convergence test to fire burns GPU indefin
 
 1. **A trustworthy baseline (~19 h).** Anneal `baseline_v2` 32,000 steps from its budgeted stop.
    Everything is blocked on this.
-2. **The calibration that never existed (~60 h).** `abl_frozen` (seed base 1028, so it is paired
+2. **DONE (2026-09-17), pending the owner's final review: the calibration.** The frozen
+   bottleneck costs 1.45-1.83 dB; from 64,000 steps that is 13x the seed spread, and before it the
+   spread is as large as the effect, so read arms only past 64,000. `postprocessing/RESULTS.md`
+   section 3. Original plan: **The calibration that never existed (~60 h).** `abl_frozen` (seed base 1028, so it is paired
    with `baseline_v2` chunk for chunk) and `baseline_v2_s2` (seed base 2028, the run-to-run
    spread). Until these land, the benchmark has **no demonstration that it can resolve an effect of
    the size it is asked to judge**, and that limitation is load-bearing for everything else.
