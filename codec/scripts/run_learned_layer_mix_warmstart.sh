@@ -74,7 +74,11 @@ for arm in ${ARMS//,/ }; do
   esac
 done
 
-BASELINE_CKPT="$PWD/checkpoints/calibration/plateau_baseline/checkpoint-304000/checkpoint.pth"
+# Phase 3 (2026-09-17): warm start from baseline_v2 at its budgeted, UNANNEALED stop. The anneal is
+# skipped on purpose -- finetune_from resets the optimiser and re-warms the LR, handing its ~+0.14 dB
+# straight back. The Experiment 1/2 arms from the retired baseline (checkpoint-304000, seed base 28,
+# dirs warmstart_*, tags control-/learned_mix-/learn7-) stay as they are; these write v2_ everything.
+BASELINE_CKPT="$PWD/checkpoints/calibration/ablation_baseline/checkpoint-296000/checkpoint.pth"
 if [ ! -f "$BASELINE_CKPT" ]; then
   echo "ABORT: locked baseline not found at $BASELINE_CKPT" >&2
   exit 1
@@ -85,7 +89,7 @@ fi
 # replay the identical ~32k-sample stream -- the silent bug that invalidated 56k steps of coverage in
 # the plateau run (README step 14). Deriving it from the chunk index instead keeps both arms PAIRED
 # (each arm's chunk N uses the same seed, hence the same data) while still advancing the stream.
-SEED_BASE=28
+SEED_BASE=1028                       # baseline_v2's; the arms share it, so they are paired chunk for chunk
 CHUNK=8000                           # one hour at 0.45 s/step, same grid as the other scripts
 VAL_EVERY=1000
 SCORE_SECONDS=372
@@ -158,8 +162,8 @@ score_checkpoint () {
 # orphaning a trained checkpoint if scoring fails), retried through the torch.hub flake.
 run_arm () {
   local name="$1" model="$2" new_keys="$3" tag_prefix="$4"
-  local out="$PWD/checkpoints/calibration/warmstart_${name}"
-  local log="checkpoints/calibration/warmstart_${name}.log"
+  local out="$PWD/checkpoints/calibration/warmstart_v2_${name}"
+  local log="checkpoints/calibration/warmstart_v2_${name}.log"
   mkdir -p "$out"
 
   # Relative to THIS arm's own current step, not a shared/global target -- so two arms at different
@@ -250,9 +254,9 @@ START=$(date +%s)
 # stock baseline checkpoint in all three cases, so they load it the same way.
 for arm in ${ARMS//,/ }; do
   case "$arm" in
-    control)     run_arm control     learned_layer_mix_control "encoder.layer_weights" control ;;
-    learned_mix) run_arm learned_mix learned_layer_mix         "encoder.layer_weights" learned_mix ;;
-    learn7)      run_arm learn7      learned_layer_mix_learn7  "encoder.layer_weights" learn7 ;;
+    control)     run_arm control     learned_layer_mix_control "encoder.layer_weights" v2_control ;;
+    learned_mix) run_arm learned_mix learned_layer_mix         "encoder.layer_weights" v2_learned_mix ;;
+    learn7)      run_arm learn7      learned_layer_mix_learn7  "encoder.layer_weights" v2_learn7 ;;
   esac
 done
 
@@ -260,7 +264,7 @@ echo ""
 echo "=================================================================="
 echo " done in $(( ($(date +%s) - START) / 60 )) min"
 echo "=================================================================="
-LEARNED_CKPT_DIR="$PWD/checkpoints/calibration/warmstart_learned_mix"
+LEARNED_CKPT_DIR="$PWD/checkpoints/calibration/warmstart_v2_learned_mix"
 ARMS="$ARMS" LEARNED_CKPT_DIR="$LEARNED_CKPT_DIR" "$PIXI" run python codec/scripts/report_layer_mix.py
 
 # Persist this session's metadata while the log still exists. checkpoints/ is gitignored and the
