@@ -1,6 +1,6 @@
 # Recalibration: a new baseline, the ablation, and the seed
 
-**Status: pre-registered, not run. This is the project's highest-priority compute.** Written
+**Status: complete (2026-09-17). Results in `postprocessing/RESULTS.md` section 3.** Originally pre-registered as the project's highest-priority compute. Written
 before either run exists, so the design and the falsification conditions are on record rather than
 fitted to whatever comes out.
 

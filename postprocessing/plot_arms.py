@@ -14,7 +14,17 @@ NO PER-CHUNK INCREMENT PANEL. It existed to answer "has this plateaued", which t
 the PSNR panel answers directly, and it could not carry several arms without becoming a mess of
 overlapping bars.
 
-THE LAST PANEL IS A ZOOM, NOT A NEW MEASUREMENT. A running arm has covered a fraction of the
+THE SEED ARM IS NOT PAIRED. `baseline_v2_s2` is the baseline model on seed base 2028, so it starts
+from different weights and meets different data at every step. Its difference from the baseline is
+the run-to-run spread, and the gap panel draws it beside the frozen arm's gap so the effect is read
+against the noise it has to clear. It is never described as a gap.
+
+THE SEPARATION WINDOW is the second half of the range all three arms share. It was chosen after the
+data was seen: before it, the seed difference is as large as the effect (up to 1.2 dB at 24,000),
+which is also why the old 15,299-step A/B/C calibration could not resolve anything. The full-range
+numbers are tabulated beside it.
+
+THE ZOOM PANEL IS NOT A NEW MEASUREMENT. A running arm has covered a fraction of the
 baseline's steps, so on a full-range axis the comparison is a stub in the corner. The final panel
 re-plots PSNR over only the range every arm has reached. Arms share a seed base, so at any step they
 trained on the same data and the gap there is attributable to the intervention. Nothing reads an arm
@@ -35,6 +45,11 @@ C_BASE = "#2a78d6"
 C_ANNEAL = "#1baf7a"
 C_FROZEN = "#eb6834"
 C_SEED2 = "#7b5cd6"
+C_THRESH = "#b3261e"
+
+# Effect must clear the seed spread by this factor, the criterion the A/B/C launcher set and failed.
+CRITERION = 3.0
+METRICS = ["psnr", "ssim", "lpips", "p_dino", "r_fdd"]
 
 BASELINE = "ablation_baseline"
 FROZEN = "ablation_frozen_bneck"
@@ -56,8 +71,8 @@ LOSS_TERMS = [
 ]
 
 
-def scored(run_dir: str) -> list[tuple[int, float]]:
-    """(step, psnr) for one run, keyed off the checkpoint path rather than the tag.
+def scored(run_dir: str, metric: str = "psnr") -> list[tuple[int, float]]:
+    """(step, metric) for one run, keyed off the checkpoint path rather than the tag.
 
     Tags are per-arm and one deliberately no longer matches its own directory, so a tag prefix can
     pair one run's curve with another's numbers. The path cannot drift from the run that wrote it.
@@ -66,7 +81,7 @@ def scored(run_dir: str) -> list[tuple[int, float]]:
     for row in lib.load_rows():
         m = re.search(rf"/{re.escape(run_dir)}/checkpoint-(\d+)/", row.get("checkpoint", ""))
         if m:
-            out.append((int(m.group(1)), row["psnr"]))
+            out.append((int(m.group(1)), row[metric]))
     return sorted(out)
 
 
@@ -111,6 +126,28 @@ def trend(points, n=10):
     return b * 10_000, sd, (abs(b * (xs[-1] - xs[0])) / sd if sd else float("inf"))
 
 
+def separation(run_dir_a: str, run_dir_b: str):
+    """Per metric: |baseline - frozen| and |baseline - seed 2| at every step all three share.
+
+    Returns (steps, {metric: (effect list, seed list)}), the window being the later half of the
+    shared steps. The ratio quoted is the SMALLEST effect over the LARGEST seed difference in the
+    window, so it is the worst case rather than an average.
+    """
+    out = {}
+    steps = None
+    for m in METRICS:
+        base, fro, sd = (dict(scored(r, m)) for r in (BASELINE, run_dir_a, run_dir_b))
+        shared = sorted(set(base) & set(fro) & set(sd))
+        steps = shared
+        out[m] = ([abs(base[s] - fro[s]) for s in shared], [abs(base[s] - sd[s]) for s in shared])
+    return steps, out
+
+
+def window(steps):
+    """Index of the first step in the later half of the shared range."""
+    return len(steps) // 2
+
+
 def label_at(ax, point, text, color, dx=8, dy=0, ha="left"):
     ax.annotate(
         text,
@@ -129,7 +166,7 @@ def build():
     psnr = {run: scored(run) for run, _, _ in ARMS}
     present = [(run, name, c) for run, name, c in ARMS if psnr[run]]
 
-    fig, axes = plt.subplots(2, 3, figsize=(15.4, 8.2), facecolor=SURFACE)
+    fig, axes = plt.subplots(2, 4, figsize=(20, 8.4), facecolor=SURFACE)
 
     # ---- panel 1: the scored metric, every arm -------------------------------------------------
     ax = axes[0][0]
@@ -177,7 +214,7 @@ def build():
 
     # ---- panels 2-5: mira's four validation terms, every arm -----------------------------------
     for idx, (term, sub) in enumerate(LOSS_TERMS):
-        a = axes[(idx + 1) // 3][(idx + 1) % 3]
+        a = axes[1][idx]
         floored = False
         for run, name, c in present:
             pts = readings(run, term)
@@ -201,7 +238,7 @@ def build():
             )
 
     # ---- panel 6: the matched range, where a comparison is legible ------------------------------
-    bx = axes[1][2]
+    bx = axes[0][1]
     others = [(run, name, c) for run, name, c in present if run != BASELINE]
     hi = min((psnr[run][-1][0] for run, _, _ in others), default=None)
     if hi is not None:
@@ -216,19 +253,27 @@ def build():
                 markersize=4,
             )
             if run == BASELINE:
-                label_at(bx, pts[-1], name, c, dx=-6, dy=8, ha="right")
+                label_at(bx, pts[-1], name, c, dx=-6, dy=10, ha="right")
             else:
-                label_at(bx, pts[0], name, c, dx=8, dy=-4, ha="left")
+                # Seed 2 sits on top of the baseline or crosses it everywhere, so it is labelled in
+                # the empty top-left corner instead of beside a point.
+                if run == FROZEN:
+                    label_at(bx, pts[-1], name, c, dx=-6, dy=-20, ha="right")
+                else:
+                    bx.annotate(name, xy=(0.03, 0.93), xycoords="axes fraction", fontsize=8.5,
+                                fontweight="bold", color=c)
         bd = dict(psnr[BASELINE])
         gaps = []
         for run, _, _ in others:
+            if run != FROZEN:
+                continue
             for s, p in psnr[run]:
                 if s in bd and s <= hi:
                     bx.plot([s, s], [p, bd[s]], color=INK_SOFT, linewidth=0.8, zorder=1)
                     gaps.append(bd[s] - p)
         if gaps:
             bx.annotate(
-                f"gap {min(gaps):.2f}–{max(gaps):.2f} dB",
+                f"frozen gap {min(gaps):.2f}–{max(gaps):.2f} dB",
                 xy=(0.5, 0.42),
                 xycoords="axes fraction",
                 ha="center",
@@ -237,10 +282,52 @@ def build():
                 color=INK,
             )
         bx.set_title(f"Matched steps, to {hi:,}  ↑ better", loc="left", fontweight="bold")
-        bx.set_xlabel("panel 1, over the range every arm has reached")
+        bx.set_xlabel("the range every arm has reached")
         bx.set_ylabel("PSNR (dB)")
     else:
         bx.axis("off")
+
+    # ---- panel 7: the effect against the noise it must clear, per step --------------------------
+    if psnr[FROZEN] and psnr[SEED2]:
+        steps, sep = separation(FROZEN, SEED2)
+        eff, seed = sep["psnr"]
+        gx = axes[0][2]
+        gx.plot(steps, eff, color=C_FROZEN, linewidth=2, marker="o", markersize=4)
+        gx.plot(steps, seed, color=C_SEED2, linewidth=2, marker="o", markersize=4)
+        w = window(steps)
+        gx.axvspan(steps[w], steps[-1], color=GRID, alpha=0.6, zorder=0)
+        label_at(gx, (steps[-1], eff[-1]), "|baseline − frozen|", C_FROZEN, dx=-4, dy=8, ha="right")
+        label_at(gx, (steps[-1], seed[-1]), "|baseline − seed 2|", C_SEED2, dx=-4, dy=8, ha="right")
+        gx.annotate(
+            f"window: max seed diff {max(seed[w:]):.2f} dB",
+            xy=(steps[w], max(seed[w:])),
+            xytext=(4, 30),
+            textcoords="offset points",
+            fontsize=8,
+            color=INK_SOFT,
+        )
+        gx.set_ylim(bottom=0)
+        gx.set_title("PSNR effect vs seed spread  (dB)", loc="left", fontweight="bold")
+        gx.set_xlabel("shaded: the separation window")
+
+        # ---- panel 8: the worst-case ratio in the window, for every scored metric ----------------
+        rx = axes[0][3]
+        ratios = [min(sep[m][0][w:]) / max(sep[m][1][w:]) for m in METRICS]
+        ys = list(range(len(METRICS)))[::-1]
+        rx.barh(ys, ratios, color=C_FROZEN, height=0.55)
+        rx.axvline(CRITERION, color=C_THRESH, linewidth=1.2, linestyle=(0, (4, 3)))
+        rx.annotate(f"{CRITERION:g}× criterion", xy=(CRITERION, ys[0] + 0.45), xytext=(4, 0),
+                    textcoords="offset points", fontsize=8, color=C_THRESH)
+        for y, r in zip(ys, ratios, strict=True):
+            rx.annotate(f"{r:.1f}×", xy=(r, y), xytext=(4, 0), textcoords="offset points",
+                        va="center", fontsize=8.5, fontweight="bold", color=INK)
+        rx.set_yticks(ys, [lib.METRIC_LABEL[m] for m in METRICS])
+        rx.set_xlim(0, max(ratios) * 1.2)
+        rx.set_title("Smallest effect / largest seed diff", loc="left", fontweight="bold")
+        rx.set_xlabel(f"over the window, steps {steps[w]:,}–{steps[-1]:,}")
+    else:
+        axes[0][2].axis("off")
+        axes[0][3].axis("off")
 
     for a in axes.flat:
         if a.has_data():
@@ -248,11 +335,12 @@ def build():
             a.grid(True, color=GRID, linewidth=0.7)
             a.set_axisbelow(True)
             lib.spines(a)
-            lib.thousands(a)
+            if a is not axes[0][3]:
+                lib.thousands(a)
 
     fig.tight_layout(rect=(0, 0.05, 1, 0.955))
     fig.suptitle(
-        "Every arm under the locked recipe — scored PSNR and mira's four validation terms",
+        "The bottleneck ablation against the seed spread — scored metrics and mira's four validation terms",
         x=0.006,
         ha="left",
         fontsize=12,
@@ -261,11 +349,11 @@ def build():
     fig.text(
         0.008,
         0.012,
-        "All arms run constant LR 1e-4 in 8,000-step chunks from the same seed base, so at any step "
-        "they have trained on the same data; the anneal is the baseline's own final phase.\n"
+        "All arms run constant LR 1e-4 in 8,000-step chunks. Baseline and frozen share seed base 1028 "
+        "(same init, same data at every step); seed 2 uses base 2028. The anneal is the baseline's "
+        "own final phase.\n"
         "Validation terms are mira's val loop (512 samples, every 1,000 steps, replays excluded); "
-        "PSNR is eval_codec on 2,048 held-out frames. Arms still running are read at matched steps "
-        "only.",
+        "PSNR is eval_codec on 2,048 held-out frames. Arms are compared at matched steps only.",
         fontsize=8.5,
         color=INK,
         va="bottom",
@@ -275,10 +363,11 @@ def build():
 
 def stats_for(psnr, cut) -> str:
     base = psnr[BASELINE]
+    bd = dict(base)
     lines = ["### The arms\n"]
 
     if cut is not None:
-        pre = dict(base).get(cut)
+        pre = bd.get(cut)
         post = base[-1]
         rate, sd, ratio = trend([(s, p) for s, p in base if s <= cut])
         lines.append(
@@ -287,27 +376,87 @@ def stats_for(psnr, cut) -> str:
             f"**{sd:.3f} dB** — a ratio of **{ratio:.0f}x**, so it was stopped on budget "
             f"rather than at a ceiling. A {post[0] - cut:,}-step cosine decay to min_lr then took "
             f"it to **{post[1]:.4f} dB** at step **{post[0]:,}**, a gain of "
-            f"**{post[1] - pre:+.4f} dB**. That endpoint is the fixed reference every arm is read "
-            f"against.\n"
+            f"**{post[1] - pre:+.4f} dB**.\n"
         )
 
-    bd = dict(base)
-    for run, name, _ in ARMS:
-        if run == BASELINE or not psnr[run]:
-            continue
-        pts = psnr[run]
-        gaps = [(s, p, bd[s] - p) for s, p in pts if s in bd]
-        if not gaps:
-            continue
-        rows = "\n".join(f"| {s:,} | {p:.4f} | {bd[s]:.4f} | **{g:+.4f}** |" for s, p, g in gaps)
-        only = [g for _, _, g in gaps]
+    meta = json.loads((lib.DATA / "run_metadata.json").read_text())
+    runs = meta["runs"]
+    lines.append(
+        "**Step-0 training loss** (first logged loss; identical weights and batch give an identical "
+        "value): "
+        + ", ".join(
+            f"`{r}` **{runs[r]['step0_train_loss']:.4f}**" for r, _, _ in ARMS if r in runs
+        )
+        + ".\n"
+    )
+    pair = meta["pairing"].get(f"{BASELINE} vs {FROZEN}")
+    if pair:
         lines.append(
-            f"**{name[0].upper()}{name[1:]}, at matched steps.** Same recipe and seed base as the "
-            f"baseline, so the same data chunk for chunk:\n\n"
-            "| step | this arm | baseline | gap |\n|---|---|---|---|\n"
-            f"{rows}\n\n"
-            f"The gap runs **{min(only):.4f}** to **{max(only):.4f} dB** over {len(only)} matched "
-            f"readings, through step **{pts[-1][0]:,}**.\n"
+            f"**Data pairing, baseline vs frozen:** {len(pair['shared_seeds'])} shared chunk seeds, "
+            f"identical over the shared range: **{pair['identical_over_shared_range']}**.\n"
+        )
+
+    fro, sd2 = psnr[FROZEN], psnr[SEED2]
+    if fro and sd2:
+        fd, sdd = dict(fro), dict(sd2)
+        steps = sorted(set(bd) & set(fd) & set(sdd))
+        rows = "\n".join(
+            f"| {s:,} | {bd[s]:.4f} | {fd[s]:.4f} | {sdd[s]:.4f} | **{bd[s] - fd[s]:+.4f}** | "
+            f"{bd[s] - sdd[s]:+.4f} |"
+            for s in steps
+        )
+        lines.append(
+            "**PSNR at matched steps** (dB). *Gap* = baseline − frozen (paired). *Seed diff* = "
+            "baseline − seed 2 (unpaired: different init and data).\n\n"
+            "| step | baseline | frozen | seed 2 | gap | seed diff |\n|---|---|---|---|---|---|\n"
+            f"{rows}\n"
+        )
+        extra = [(s, p) for s, p in fro if s not in sdd and s in bd]
+        if extra:
+            lines.append(
+                "Frozen readings past the seed arm's last step: "
+                + ", ".join(f"{s:,}: gap **{bd[s] - p:+.4f}**" for s, p in extra)
+                + ".\n"
+            )
+        gaps = [bd[s] - p for s, p in fro if s in bd]
+        lines.append(
+            f"Frozen gap over all {len(gaps)} matched readings (to {fro[-1][0]:,}): "
+            f"**{min(gaps):.4f}** to **{max(gaps):.4f} dB**. Trend over the last 8: "
+            f"**{trend([(s, bd[s] - p) for s, p in fro if s in bd], 8)[0]:+.4f} dB per 10,000 "
+            f"steps**.\n"
+        )
+
+        # Per-chunk increments, for the step-104,000 question pre-registered in the notes.
+        def incs(pts):
+            return {b[0]: b[1] - a[1] for a, b in zip(pts, pts[1:])}
+
+        ib, i2 = incs([(s, p) for s, p in base if s <= steps[-1]]), incs(sd2)
+        rows = "\n".join(f"| {s:,} | {ib[s]:+.4f} | {i2[s]:+.4f} |" for s in steps if s in ib and s in i2)
+        lines.append(
+            "**Per-chunk PSNR increments** (dB; the chunk ending at that step). Baseline and seed 2 "
+            "train on different data at the same steps.\n\n"
+            "| step | baseline | seed 2 |\n|---|---|---|\n"
+            f"{rows}\n"
+        )
+
+        st, sep = separation(FROZEN, SEED2)
+        w = window(st)
+        rows = []
+        for m in METRICS:
+            eff, sdv = sep[m]
+            rows.append(
+                f"| {lib.METRIC_LABEL[m]} | {min(eff[w:]):.3g} | {max(sdv[w:]):.3g} | "
+                f"**{min(eff[w:]) / max(sdv[w:]):.1f}×** | {min(eff):.3g} | {max(sdv):.3g} | "
+                f"{min(eff) / max(sdv):.1f}× |"
+            )
+        lines.append(
+            f"**Separation by metric.** Smallest |baseline − frozen| over the largest "
+            f"|baseline − seed 2|. Window = later half of the {len(st)} shared steps, "
+            f"**{st[w]:,}–{st[-1]:,}** ({len(st) - w} readings), chosen after seeing the data. "
+            f"Criterion {CRITERION:g}×.\n\n"
+            "| metric | min effect (window) | max seed diff (window) | ratio (window) | "
+            "min effect (all) | max seed diff (all) | ratio (all) |\n"
+            "|---|---|---|---|---|---|---|\n" + "\n".join(rows) + "\n"
         )
 
     missing = [name for run, name, _ in ARMS if not psnr[run]]

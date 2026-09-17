@@ -6,9 +6,10 @@ bottleneck, and a ViT decoder — and the world model predicts in the latent tha
 This repository reproduces that codec at a scale that fits one consumer GPU, and uses it as a
 benchmark for changes to the codec design.
 
-**Status.** The benchmark and its training protocol are built and characterised, the reference
-baseline is trained and annealed, and the first ablation against it resolves the effect it was
-meant to. Section 3 has both; the remaining studies are queued (section 4).
+**Status.** The benchmark, its training protocol and the reference baseline are done. The
+calibration is also done: a frozen-bottleneck ablation plus a second-seed baseline show that the
+benchmark resolves an effect of the size mira report (section 3). The layer-aggregation studies
+are queued (section 4).
 
 **Every figure and number here is generated from the run record, not written.** The numbers are
 quoted from [`stats.md`](stats.md); if the two disagree, `stats.md` is right.
@@ -66,33 +67,74 @@ absolute step. Every arm runs it and is read at matched steps. Pre-registered in
 length is a decision rather than a measurement. Consecutive chunks train on different data, so
 progress is read as a trailing trend, never off a single chunk.
 
-## 3. The arms
+## 3. Calibration: can the benchmark resolve a known effect?
 
-![every arm under the locked recipe](figures/arms.png)
+![calibration: baseline, frozen bottleneck and second seed](figures/arms.png)
 
-**The baseline.** A cold start under the recipe above: constant LR to 264,000 steps, reaching
-**24.6624 dB** and still improving at **+0.019 dB per 10,000 steps** against a between-reading
-spread of **0.010 dB** — a ratio of **13x**, so it was stopped on budget, not at a ceiling. A
-32,000-step cosine decay then took it to **24.9122 dB** at step **296,000**, worth **+0.2498 dB**.
-That endpoint is the fixed reference every arm is read against.
+**Design.** Three runs under the locked recipe. mira report that freezing the linear bottleneck
+at its random initialisation costs about **1.4 dB**. That change removes 131,104 of 114,188,320
+trainable parameters (0.115%).
 
-**The frozen-bottleneck ablation** is the test of whether this benchmark separates arms at all:
-replace the trained linear bottleneck with a random frozen one, train everything else identically.
-mira report roughly **1.4 dB** for it. Over eight matched readings the frozen arm sits **1.4470** to
-**1.7352 dB** below the baseline — the effect is resolved, at a size consistent with the published
-one. It has run to **64,000** steps and is still going.
+| run | model | seed base | role |
+|---|---|---|---|
+| baseline (`baseline_v2`) | stock | 1028 | reference |
+| frozen bottleneck (`abl_frozen`) | bottleneck projection not trained | 1028 | ablation, paired with the baseline |
+| baseline, seed 2 (`baseline_v2_s2`) | stock | 2028 | run-to-run spread |
 
-The validation panels say where that gap comes from. `loss_lpips_perceptual` and `loss_mae` both
-separate the arms; `loss_dino_latent_consistency` sits at mira's four-decimal logging floor for
-both, so nothing about that term can be read from these logs.
+Because the seed base is shared, the baseline and the frozen arm start from identical weights and
+train on identical data at every step. The only difference is whether the bottleneck receives
+gradients. Two checks confirm this: both runs log the same step-0 training loss (**0.9890**;
+seed 2 logs **1.2022**), and they share all **17** chunk seeds. The seed-2 run differs from the
+baseline in both initialisation and data, so the difference between those two runs measures
+run-to-run spread.
 
-Two limits. This is an early-training comparison, and the gap may still move. And a single pair
-cannot separate the intervention from run-to-run spread — the second-seed baseline, which measures
-that spread directly, has **not yet run**.
+**Baseline.** It ran at constant LR to 264,000 steps and reached **24.6624 dB**. It was still
+improving at **+0.019 dB per 10,000 steps**, 13× the spread between readings, so it was stopped on
+budget rather than at a ceiling. A 32,000-step cosine decay then took it to **24.9122 dB** at step
+296,000 (**+0.2498 dB**). The comparisons below use only the constant-LR readings, at matched
+steps.
+
+**Result 1: the ablation costs 1.45–1.83 dB.** Over 16 matched readings to step 128,000, the
+frozen arm is below the baseline at every step, by **1.4470** to **1.8283 dB**. The gap had not
+settled when the run stopped: over the last 8 readings it grew by **+0.015 dB per 10,000 steps**.
+The size is consistent with mira's ~1.4 dB but not equal to it; this rig uses a smaller decoder
+and trains on images only (section 1).
+
+**Result 2: after about 60,000 steps, the gap is much larger than the seed spread.** The two
+seeds differ by **up to 1.22 dB** over the first 56,000 steps, which is nearly the size of the
+effect. From 64,000 to 120,000 steps (8 readings), they differ by **at most 0.13 dB**.
+
+| metric | smallest gap, 64k–120k | largest seed difference, 64k–120k | ratio | ratio, all steps |
+|---|---|---|---|---|
+| PSNR (dB) | 1.67 | 0.128 | **13.1×** | 1.2× |
+| LPIPS | 0.0747 | 0.00375 | **19.9×** | 1.5× |
+| P-DINO | 5.67e-05 | 4.94e-06 | **11.5×** | 2.5× |
+| SSIM | 0.0558 | 0.00673 | **8.3×** | 1.4× |
+| rFDD | 0.576 | 0.147 | **3.9×** | 1.4× |
+
+In that window, all five metrics clear the 3× criterion set for the original calibration; rFDD
+clears it by the least. Over all steps, none of them does. That matches the failure of the earlier
+three-run calibration, which was read at 15,299 steps. **Comparisons on this rig are therefore only
+meaningful after about 64,000 steps.** Of mira's validation terms, `loss_mae` and
+`loss_lpips_perceptual` separate the arms. `loss_dino_latent_consistency` is at the log's
+four-decimal floor, so it cannot be read.
+
+**Result 3: the dip at step 104,000 came from that chunk's data, not from the step.** Between
+96,000 and 104,000 the baseline gained only **+0.029 dB**, while seed 2, on different data, gained
+**+0.128 dB**. Seed 2 has its own dip on a different chunk: **−0.318 dB** at 48,000. Single-chunk
+dips therefore reflect the data slice, which is why progress is read as a trend (section 2).
+
+**Limits.**
+- The spread comes from **one pair of seeds**. It shows how large run-to-run differences can be,
+  not their distribution.
+- The window was chosen after seeing the data. The per-step table in [`stats.md`](stats.md) gives
+  every reading.
+- All readings are at constant LR. The arms were not annealed, so the gap after an anneal is not
+  measured.
 
 ## 4. In progress
 
-Queued under the same recipe: the second-seed baseline, the rest of the frozen ablation, and the
-learned layer-aggregation studies. Earlier studies that ran against a superseded baseline are
-archived at [`archive/RESULTS-legacy-baseline.md`](archive/RESULTS-legacy-baseline.md); their
-magnitudes do not carry over and nothing here depends on them.
+Queued under the same recipe: the learned layer-aggregation studies (`control`, `learned_mix`,
+`learn7`), read at matched steps past 64,000. Earlier studies that ran against a superseded
+baseline are archived at [`archive/RESULTS-legacy-baseline.md`](archive/RESULTS-legacy-baseline.md);
+their magnitudes do not carry over, and nothing here depends on them.

@@ -41,6 +41,9 @@ VAL = re.compile(
     r"loss_dino_latent_consistency=([\d.]+), loss_total=([\d.]+)"
 )
 NEW_CHUNK = re.compile(r"Training configuration:")
+# The first logged training loss. Two runs built from the same torch seed start from bit-identical
+# weights and the same first batch, so this must match exactly between paired arms.
+STEP0 = re.compile(r"^Step 0: total loss ([\d.]+)$")
 # Exact indent plus key, because `steps` and `decay_steps` both end in "steps" and `run.seed`
 # must not be confused with anything else.
 SCALARS = {
@@ -57,6 +60,7 @@ SCALARS = {
 def parse(log: pathlib.Path) -> dict:
     chunks: list[dict] = []
     readings: dict[int, dict] = {}
+    step0: float | None = None
     for raw in log.read_text(errors="ignore").splitlines():
         line = raw.split("] - ", 1)[-1] if "] - " in raw else raw
         if NEW_CHUNK.search(line):
@@ -67,6 +71,9 @@ def parse(log: pathlib.Path) -> dict:
                 m = pat.match(line)
                 if m and key not in chunks[-1]:
                     chunks[-1][key] = m.group(1)
+        m = STEP0.match(line)
+        if m and step0 is None:
+            step0 = float(m.group(1))
         m = VAL.search(line)
         if m:
             # A restart re-validates a step already seen; the later reading wins.
@@ -108,6 +115,7 @@ def parse(log: pathlib.Path) -> dict:
         "seeds_unique": seeds,
         "seed_schedule": [c["seed"] for c in chunks if "seed" in c],
         "schedule": schedule,
+        "step0_train_loss": step0,
         "readings": [readings[s] for s in sorted(readings)],
     }
 
@@ -139,7 +147,11 @@ def main() -> None:
 
     # The paired design's central claim, checked rather than asserted: arms compared against each
     # other must have drawn the same data at the same steps.
-    pairs = [("warmstart_control", "warmstart_learned_mix"), ("warmstart_control", "warmstart_learn7")]
+    pairs = [
+        ("warmstart_control", "warmstart_learned_mix"),
+        ("warmstart_control", "warmstart_learn7"),
+        ("ablation_baseline", "ablation_frozen_bneck"),
+    ]
     out["pairing"] = {}
     for x, y in pairs:
         if x in out["runs"] and y in out["runs"]:

@@ -156,6 +156,7 @@ def run_metadata_table() -> str:
             "warmstart_learned_mix": "learned_mix",
             "ablation_baseline": "abl_baseline",
             "ablation_frozen_bneck": "abl_frozen",
+            "baseline_v2_seed2": "baseline_v2_s2",
         }.get(name)
         n_psnr = len(lib.series(rows, prefix)) if prefix else sum(1 for r in rows if r["tag"] == name)
         seeds = rec["seeds_unique"]
