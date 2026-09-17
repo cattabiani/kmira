@@ -123,7 +123,7 @@ current_step () {
 # Without this, keeping one checkpoint per chunk would cost 110GiB per 200k arm instead of 42GiB.
 prune_training_state () {
   local out="$1" newest
-  newest="$(ls -d "$out"/checkpoint-*/ 2>/dev/null | sort -V | tail -1)"
+  newest="$(ls -d "$out"/checkpoint-*/ 2>/dev/null | sort -V | tail -1 || true)"
   [ -z "$newest" ] && return 0
   local d
   for d in "$out"/checkpoint-*/; do
