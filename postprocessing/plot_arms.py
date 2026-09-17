@@ -16,8 +16,8 @@ overlapping bars.
 
 THE SEED ARM IS NOT PAIRED. `baseline_v2_s2` is the baseline model on seed base 2028, so it starts
 from different weights and meets different data at every step. Its difference from the baseline is
-the run-to-run spread, and the gap panel draws it beside the frozen arm's gap so the effect is read
-against the noise it has to clear. It is never described as a gap.
+the run-to-run spread, tabulated beside the frozen arm's gap in stats.md. It is never described as a
+gap.
 
 THE SEPARATION WINDOW is the second half of the range all three arms share. It was chosen after the
 data was seen: before it, the seed difference is as large as the effect (up to 1.2 dB at 24,000),
@@ -33,6 +33,7 @@ against the baseline's ENDPOINT, which would confound the intervention with the 
 
 from __future__ import annotations
 
+import itertools
 import json
 import re
 
@@ -45,7 +46,6 @@ C_BASE = "#2a78d6"
 C_ANNEAL = "#1baf7a"
 C_FROZEN = "#eb6834"
 C_SEED2 = "#7b5cd6"
-C_THRESH = "#b3261e"
 
 # Effect must clear the seed spread by this factor, the criterion the A/B/C launcher set and failed.
 CRITERION = 3.0
@@ -166,7 +166,7 @@ def build():
     psnr = {run: scored(run) for run, _, _ in ARMS}
     present = [(run, name, c) for run, name, c in ARMS if psnr[run]]
 
-    fig, axes = plt.subplots(2, 4, figsize=(20, 8.4), facecolor=SURFACE)
+    fig, axes = plt.subplots(2, 3, figsize=(15.4, 8.2), facecolor=SURFACE)
 
     # ---- panel 1: the scored metric, every arm -------------------------------------------------
     ax = axes[0][0]
@@ -214,7 +214,7 @@ def build():
 
     # ---- panels 2-5: mira's four validation terms, every arm -----------------------------------
     for idx, (term, sub) in enumerate(LOSS_TERMS):
-        a = axes[1][idx]
+        a = axes[(idx + 1) // 3][(idx + 1) % 3]
         floored = False
         for run, name, c in present:
             pts = readings(run, term)
@@ -238,7 +238,7 @@ def build():
             )
 
     # ---- panel 6: the matched range, where a comparison is legible ------------------------------
-    bx = axes[0][1]
+    bx = axes[1][2]
     others = [(run, name, c) for run, name, c in present if run != BASELINE]
     hi = min((psnr[run][-1][0] for run, _, _ in others), default=None)
     if hi is not None:
@@ -287,56 +287,13 @@ def build():
     else:
         bx.axis("off")
 
-    # ---- panel 7: the effect against the noise it must clear, per step --------------------------
-    if psnr[FROZEN] and psnr[SEED2]:
-        steps, sep = separation(FROZEN, SEED2)
-        eff, seed = sep["psnr"]
-        gx = axes[0][2]
-        gx.plot(steps, eff, color=C_FROZEN, linewidth=2, marker="o", markersize=4)
-        gx.plot(steps, seed, color=C_SEED2, linewidth=2, marker="o", markersize=4)
-        w = window(steps)
-        gx.axvspan(steps[w], steps[-1], color=GRID, alpha=0.6, zorder=0)
-        label_at(gx, (steps[-1], eff[-1]), "|baseline − frozen|", C_FROZEN, dx=-4, dy=8, ha="right")
-        label_at(gx, (steps[-1], seed[-1]), "|baseline − seed 2|", C_SEED2, dx=-4, dy=8, ha="right")
-        gx.annotate(
-            f"window: max seed diff {max(seed[w:]):.2f} dB",
-            xy=(steps[w], max(seed[w:])),
-            xytext=(4, 30),
-            textcoords="offset points",
-            fontsize=8,
-            color=INK_SOFT,
-        )
-        gx.set_ylim(bottom=0)
-        gx.set_title("PSNR effect vs seed spread  (dB)", loc="left", fontweight="bold")
-        gx.set_xlabel("shaded: the separation window")
-
-        # ---- panel 8: the worst-case ratio in the window, for every scored metric ----------------
-        rx = axes[0][3]
-        ratios = [min(sep[m][0][w:]) / max(sep[m][1][w:]) for m in METRICS]
-        ys = list(range(len(METRICS)))[::-1]
-        rx.barh(ys, ratios, color=C_FROZEN, height=0.55)
-        rx.axvline(CRITERION, color=C_THRESH, linewidth=1.2, linestyle=(0, (4, 3)))
-        rx.annotate(f"{CRITERION:g}× criterion", xy=(CRITERION, ys[0] + 0.45), xytext=(4, 0),
-                    textcoords="offset points", fontsize=8, color=C_THRESH)
-        for y, r in zip(ys, ratios, strict=True):
-            rx.annotate(f"{r:.1f}×", xy=(r, y), xytext=(4, 0), textcoords="offset points",
-                        va="center", fontsize=8.5, fontweight="bold", color=INK)
-        rx.set_yticks(ys, [lib.METRIC_LABEL[m] for m in METRICS])
-        rx.set_xlim(0, max(ratios) * 1.2)
-        rx.set_title("Smallest effect / largest seed diff", loc="left", fontweight="bold")
-        rx.set_xlabel(f"over the window, steps {steps[w]:,}–{steps[-1]:,}")
-    else:
-        axes[0][2].axis("off")
-        axes[0][3].axis("off")
-
     for a in axes.flat:
         if a.has_data():
             a.set_facecolor(SURFACE)
             a.grid(True, color=GRID, linewidth=0.7)
             a.set_axisbelow(True)
             lib.spines(a)
-            if a is not axes[0][3]:
-                lib.thousands(a)
+            lib.thousands(a)
 
     fig.tight_layout(rect=(0, 0.05, 1, 0.955))
     fig.suptitle(
@@ -428,7 +385,7 @@ def stats_for(psnr, cut) -> str:
 
         # Per-chunk increments, for the step-104,000 question pre-registered in the notes.
         def incs(pts):
-            return {b[0]: b[1] - a[1] for a, b in zip(pts, pts[1:])}
+            return {b[0]: b[1] - a[1] for a, b in itertools.pairwise(pts)}
 
         ib, i2 = incs([(s, p) for s, p in base if s <= steps[-1]]), incs(sd2)
         rows = "\n".join(f"| {s:,} | {ib[s]:+.4f} | {i2[s]:+.4f} |" for s in steps if s in ib and s in i2)
