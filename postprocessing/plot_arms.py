@@ -260,8 +260,14 @@ def build():
                 if run == FROZEN:
                     label_at(bx, pts[-1], name, c, dx=-6, dy=-20, ha="right")
                 else:
-                    bx.annotate(name, xy=(0.03, 0.93), xycoords="axes fraction", fontsize=8.5,
-                                fontweight="bold", color=c)
+                    bx.annotate(
+                        name,
+                        xy=(0.03, 0.93),
+                        xycoords="axes fraction",
+                        fontsize=8.5,
+                        fontweight="bold",
+                        color=c,
+                    )
         bd = dict(psnr[BASELINE])
         gaps = []
         for run, _, _ in others:
@@ -341,9 +347,7 @@ def stats_for(psnr, cut) -> str:
     lines.append(
         "**Step-0 training loss** (first logged loss; identical weights and batch give an identical "
         "value): "
-        + ", ".join(
-            f"`{r}` **{runs[r]['step0_train_loss']:.4f}**" for r, _, _ in ARMS if r in runs
-        )
+        + ", ".join(f"`{r}` **{runs[r]['step0_train_loss']:.4f}**" for r, _, _ in ARMS if r in runs)
         + ".\n"
     )
     pair = meta["pairing"].get(f"{BASELINE} vs {FROZEN}")
